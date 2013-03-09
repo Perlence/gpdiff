@@ -1,4 +1,5 @@
 import copy
+from guitarpro import base as gp
 
 def flatten(song):
     result = []
@@ -14,7 +15,15 @@ def flatten(song):
         for measure in measures:
             newMeasure = copy.copy(measure)
             result.append(newMeasure)
-        result.append('end')
-    result.append('end')
-    
     return result
+
+def restore(sequence):
+    song = None
+    for e in sequence:
+        if isinstance(e, gp.Song):
+            song = e
+        elif isinstance(e, gp.Track):
+            song.tracks.append(e)
+        elif isinstance(e, gp.Measure):
+            song.tracks[-1].measures.append(e)
+    return song
