@@ -36,6 +36,8 @@ class MuseDiffer(diffutil.Differ):
         return result
 
     def merge(self):
+        '''Merge sequences and restore tab
+        '''
         assert len(self.songs) == 3
         # copy base file to store merged elements
         base = self.songs[1]
@@ -73,14 +75,9 @@ class MuseDiffer(diffutil.Differ):
                         yield '%s' %  e
 
 
-def findFormatExtFile(path):
-    root, ext = os.path.splitext(path)
-    if ext in ('gp3', 'gp4', 'gp5'):
-        return ext
-    else:
-        return 'gp5'
-
 def main(args):
+    '''Command line interface
+    '''
     files = args.MYFILE, args.OLDFILE, args.YOURFILE
     # parse files
     songs = [guitarpro.parse(f) for f in files if f is not None]
@@ -89,12 +86,8 @@ def main(args):
         # if --output is specified, try to merge
         if args.output is not None:
             result = differ.merge()
-            # guess output file format if not specified
-            if args.format is not None:
-                format = args.format
-            else: 
-                format = findFormatExtFile(args.output)
-            result.write(format, args.output)
+            gpfile = guitarpro.open(args.output, 'wb', format=args.format)
+            gpfile.write(result)
             if not len(differ.conflicts):
                 return 0
     # print diff
@@ -108,11 +101,14 @@ def main(args):
 if __name__ == '__main__':
     import sys
     import argparse
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='Diff and merge Guitar Pro 3-5 files',
+        epilog='''Returns 0 if diff or merge completed without conflicts,
+            returns 1 if confilts occurred,
+            returns 2 if error occurred''')
     parser.add_argument('MYFILE')
     parser.add_argument('OLDFILE')
     parser.add_argument('YOURFILE', nargs='?')
-    parser.add_argument('--output', '-o', help='path to output merged file')
-    parser.add_argument('--format', '-f', choices=['gp3', 'gp4', 'gp5'], help='output file format')
+    parser.add_argument('-o', metavar='OUTPUT', help='path to output merged file')
+    parser.add_argument('-f', choices=['gp3', 'gp4', 'gp5'], help='output file format')
     args = parser.parse_args()
     sys.exit(main(args))
