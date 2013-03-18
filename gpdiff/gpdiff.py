@@ -83,7 +83,7 @@ def main(args):
     songs = [guitarpro.parse(f) for f in files if f is not None]
     differ = MuseDiffer(songs)
     if len(files) == 3:
-        # if --output is specified, try to merge
+        # if output is specified, try to merge
         if args.output is not None:
             result = differ.merge()
             gpfile = guitarpro.open(args.output, 'wb', format=args.format)
@@ -108,7 +108,7 @@ if __name__ == '__main__':
     parser.add_argument('MYFILE')
     parser.add_argument('OLDFILE')
     parser.add_argument('YOURFILE', nargs='?')
-    parser.add_argument('-o', metavar='OUTPUT', help='path to output merged file')
-    parser.add_argument('-f', choices=['gp3', 'gp4', 'gp5'], help='output file format')
+    parser.add_argument('-o', dest='output', metavar='OUTPUT', help='path to output merged file')
+    parser.add_argument('-f', dest='format', choices=['gp3', 'gp4', 'gp5'], help='output file format')
     args = parser.parse_args()
     sys.exit(main(args))
