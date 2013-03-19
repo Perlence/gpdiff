@@ -15,11 +15,14 @@ class MuseDiffer(diffutil.Differ):
         self.songs = songs
 
     def _get_songs(self):
-        return self._songs
+        songs = self._songs
+        songs[0], songs[1] = self._songs[1], self._songs[0]
+        return songs
 
     def _set_songs(self, songs):
         self._songs = songs
-        self._sequences = map(flatten.flatten, songs)
+        self._songs[0], self._songs[1] = songs[1], songs[0]
+        self._sequences = map(flatten.flatten, self._songs)
         for _ in self.set_sequences_iter(self._sequences): 
             pass
 
@@ -44,41 +47,43 @@ class MuseDiffer(diffutil.Differ):
         merged_sequence = self._merge_sequences()
         return flatten.restore(merged_sequence)
 
+    def zincdiff(self, a, b, change):
+        '''ZINCDiff Is Not Context Diff
+        '''
+        prefix = dict(insert='+ ', delete='- ', replace='! ', equal='  ')
+        tag, i1, i2, j1, j2 = change
+        if tag == 'replace':
+            if i2 - i1 == j2 - j1:
+                for x in range(i1, i2):
+                    yield '%s%s' % (prefix['replace'], a[x])
+            else:
+                for x in range(i1, i2):
+                    yield '%s%s' % (prefix['delete'], a[x])
+                for x in range(j1, j2):
+                    yield '%s%s' % (prefix['insert'], b[x])
+        if tag == 'insert':
+            for x in range(i2 - i1, j2 - j1):
+                yield '%s%s' % (prefix[tag], b[j1 + x])
+        if tag == 'delete':
+            for x in range(j2 - j1, i2 - i1):
+                yield '%s%s' % (prefix[tag], a[i1 + x])
+
     def show(self):
         '''Output somewhat human-readible representation of diff between sequences
         '''
         for change in self.all_changes():
-            yield '===='
-
             if change[0] is not None:
-                tag, i1, i2, j1, j2 = change[0]
-                yield '1:%d,%dc' % (i1, i2)
-                for e in self._sequences[0][i1:i2]:
-                    yield '%s' %  e
-
-            if change[0] is not None:
-                tag, i1, i2, j1, j2 = change[0]
-                yield '2:%d,%dc' % (j1, j2)
-                for e in self._sequences[1][i1:i2]:
-                    yield '%s' %  e
-            else:
-                tag, i1, i2, j1, j2 = change[1]
-                yield '2:%d,%dc' % (j1, j2)
-                for e in self._sequences[1][i1:i2]:
-                    yield '%s' %  e
-
-            if len(self._sequences) == 3:
-                if change[1] is not None:
-                    tag, i1, i2, j1, j2 = change[1]
-                    yield '3:%d,%dc' % (i1, i2)
-                    for e in self._sequences[2][i1:i2]:
-                        yield '%s' %  e
+                for line in self.zincdiff(self._sequences[1], self._sequences[0], change[0]):
+                    yield line
+            if change[1] is not None:
+                for line in self.zincdiff(self._sequences[1], self._sequences[2], change[1]):
+                    yield line
 
 
 def main(args):
     '''Command line interface
     '''
-    files = args.MYFILE, args.OLDFILE, args.YOURFILE
+    files = args.OLDFILE, args.MYFILE, args.YOURFILE
     # parse files
     songs = [guitarpro.parse(f) for f in files if f is not None]
     differ = MuseDiffer(songs)
@@ -105,8 +110,8 @@ if __name__ == '__main__':
         epilog='''Returns 0 if diff or merge completed without conflicts,
             returns 1 if confilts occurred,
             returns 2 if error occurred''')
-    parser.add_argument('MYFILE')
     parser.add_argument('OLDFILE')
+    parser.add_argument('MYFILE')
     parser.add_argument('YOURFILE', nargs='?')
     parser.add_argument('-o', dest='output', metavar='OUTPUT', help='path to output merged file')
     parser.add_argument('-f', dest='format', choices=['gp3', 'gp4', 'gp5'], help='output file format')
