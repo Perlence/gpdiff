@@ -91,8 +91,7 @@ def main(args):
         # if output is specified, try to merge
         if args.output is not None:
             result = differ.merge()
-            gpfile = guitarpro.open(args.output, 'wb', format=args.format)
-            gpfile.write(result)
+            guitarpro.write(result, args.output, format=args.format)
             if not len(differ.conflicts):
                 return 0
     # print diff
