@@ -66,12 +66,12 @@ class MuseDiffer(diffutil.Differ):
             attr, value = obj
             number = self.get_tracknumber(sequence[:index])
             if number > 0:
-                print "{prefix} Track {number}: {attr} = {value}".format(prefix=prefix[action], 
+                yield "{prefix} Track {number}: {attr} = {value}".format(prefix=prefix[action], 
                                                                          number=number + self.tracknumber[pane],
                                                                          attr=attr,
                                                                          value=value)
             else:
-                print "{prefix} Song: {attr} = {value}".format(prefix=prefix[action],
+                yield "{prefix} Song: {attr} = {value}".format(prefix=prefix[action],
                                                                attr=attr,
                                                                value=value)
 
@@ -80,18 +80,23 @@ class MuseDiffer(diffutil.Differ):
         tag, i1, i2, j1, j2 = change[pane]
         if tag == 'replace':
             for x in range(i1, i2):
-                self.print_info(a, pane, x, 'delete')
+                for line in self.print_info(a, pane, x, 'delete'):
+                    yield line
             for x in range(j1, j2):
-                self.print_info(b, pane, x, 'insert')
+                for line in self.print_info(b, pane, x, 'insert'):
+                    yield line
         if tag == 'delete':
             for x in range(i1, i2):
-                self.print_info(a, pane, x, 'delete')
+                for line in self.print_info(a, pane, x, 'delete'):
+                    yield line
         if tag == 'insert':
             for x in range(j1, j2):
-                self.print_info(b, pane, x, 'insert')
+                for line in self.print_info(b, pane, x, 'insert'):
+                    yield line
         if tag == 'conflict' and pane == 0:
             for x in range(i1, i2):
-                self.print_info(a, pane, x, 'conflict')
+                for line in self.print_info(a, pane, x, 'conflict'):
+                    yield line
 
     def measurediff(self, change, pane, replace_prefix='!'):
         a, b = self._sequences[1], self._sequences[pane * 2]
@@ -129,11 +134,21 @@ class MuseDiffer(diffutil.Differ):
         # for change in self.all_changes():
         #     print change
 
+        yield 'Attributes'
+        yield '=========='
+
         for change in self.all_changes():
             if change[0] is not None:
-                self.infodiff(change, 0)
+                for line in self.infodiff(change, 0):
+                    yield line
             if change[1] is not None:
-                self.infodiff(change, 1)
+                for line in self.infodiff(change, 1):
+                    yield line
+
+        yield ''
+        yield 'Measures'
+        yield '========'
+        yield ''
 
         replace_prefix = '!'
         for change in self.all_changes():
@@ -146,9 +161,11 @@ class MuseDiffer(diffutil.Differ):
                     replace_prefix = '<' 
                 self.measurediff(change, 1, replace_prefix)
 
+        yield ' {}'.format(' '.join(map(str, range(1, len(self.measures) + 1))))
         for number, tracks in enumerate(zip(*self.measures)):
-            yield '{:<4}[{}]'.format(number + 1, 
-                                     '|'.join(map(str, tracks)))
+            yield '[{}] {}'.format('|'.join(map(str, tracks)),
+                                  number + 1)
+                                  
 
 
 
