@@ -42,42 +42,114 @@ class MuseDiffer(diffutil.Differ):
         '''Merge sequences and restore tab
         '''
         assert len(self.songs) == 3
-        # copy base file to store merged elements
-        base = self.songs[1]
         merged_sequence = self._merge_sequences()
         return flatten.restore(merged_sequence)
 
-    def zincdiff(self, a, b, change):
-        '''ZINCDiff Is Not Context Diff
-        '''
-        prefix = dict(insert='+ ', delete='- ', replace='! ', equal='  ')
-        tag, i1, i2, j1, j2 = change
+    def get_tracknumber(self, sequence):
+        tracks = filter(lambda x: x == guitarpro.Track, sequence)
+        return len(tracks)
+
+    def store_change(self, sequence, pane, index, action, replace_prefix='!'):
+        prefix = dict(insert='+', delete='-', replace=replace_prefix, conflict='x', equal=' ')
+        obj = sequence[index]
+        if isinstance(obj, guitarpro.Measure):
+            track_number = obj.track.number + self.tracknumber[pane] - 1
+            self.measures[track_number][obj.number() - 1] = prefix[action]
+        elif obj == guitarpro.Track:
+            if action == 'insert':
+                self.tracknumber[1 - pane] += 1
+
+    def print_info(self, sequence, pane, index, action, replace_prefix='!'):
+        prefix = dict(insert='+', delete='-', replace=replace_prefix, conflict='x', equal=' ')
+        obj = sequence[index]
+        if isinstance(obj, tuple):
+            attr, value = obj
+            number = self.get_tracknumber(sequence[:index])
+            if number > 0:
+                print "{prefix} Track {number}: {attr} = {value}".format(prefix=prefix[action], 
+                                                                         number=number + self.tracknumber[pane],
+                                                                         attr=attr,
+                                                                         value=value)
+            else:
+                print "{prefix} Song: {attr} = {value}".format(prefix=prefix[action],
+                                                               attr=attr,
+                                                               value=value)
+
+    def infodiff(self, change, pane):
+        a, b = self._sequences[1], self._sequences[pane * 2]
+        tag, i1, i2, j1, j2 = change[pane]
+        if tag == 'replace':
+            for x in range(i1, i2):
+                self.print_info(a, pane, x, 'delete')
+            for x in range(j1, j2):
+                self.print_info(b, pane, x, 'insert')
+        if tag == 'delete':
+            for x in range(i1, i2):
+                self.print_info(a, pane, x, 'delete')
+        if tag == 'insert':
+            for x in range(j1, j2):
+                self.print_info(b, pane, x, 'insert')
+        if tag == 'conflict' and pane == 0:
+            for x in range(i1, i2):
+                self.print_info(a, pane, x, 'conflict')
+
+    def measurediff(self, change, pane, replace_prefix='!'):
+        a, b = self._sequences[1], self._sequences[pane * 2]
+        tag, i1, i2, j1, j2 = change[pane]
         if tag == 'replace':
             if i2 - i1 == j2 - j1:
                 for x in range(i1, i2):
-                    yield '%s%s' % (prefix['replace'], a[x])
+                    self.store_change(a, pane, x, 'replace', replace_prefix)
             else:
                 for x in range(i1, i2):
-                    yield '%s%s' % (prefix['delete'], a[x])
+                    self.store_change(a, pane, x, 'delete')
                 for x in range(j1, j2):
-                    yield '%s%s' % (prefix['insert'], b[x])
-        if tag == 'insert':
-            for x in range(i2 - i1, j2 - j1):
-                yield '%s%s' % (prefix[tag], b[j1 + x])
+                    self.store_change(b, pane, x, 'insert')
         if tag == 'delete':
-            for x in range(j2 - j1, i2 - i1):
-                yield '%s%s' % (prefix[tag], a[i1 + x])
+            for x in range(i1, i2):
+                self.store_change(a, pane, x, 'delete')
+        if tag == 'insert':
+            for x in range(j1, j2):
+                self.store_change(b, pane, x, 'insert')
+        if tag == 'conflict':
+            for x in range(i1, i2):
+                self.store_change(a, pane, x, 'conflict')
 
     def show(self):
         '''Output somewhat human-readible representation of diff between sequences
         '''
+        self.measures = []
+        self.tracknumber = [0, 0]
+        for i in range(max(len(song.tracks) for song in self.songs)):
+            track = []
+            for j in range(max(len(song.tracks[0].measures) for song in self.songs)):
+                track.append(' ')
+            self.measures.append(track)
+        
+        # for change in self.all_changes():
+        #     print change
+
         for change in self.all_changes():
             if change[0] is not None:
-                for line in self.zincdiff(self._sequences[1], self._sequences[0], change[0]):
-                    yield line
+                self.infodiff(change, 0)
             if change[1] is not None:
-                for line in self.zincdiff(self._sequences[1], self._sequences[2], change[1]):
-                    yield line
+                self.infodiff(change, 1)
+
+        replace_prefix = '!'
+        for change in self.all_changes():
+            if change[0] is not None:
+                if len(self._songs) == 3:
+                    replace_prefix = '>'
+                self.measurediff(change, 0, replace_prefix)
+            if change[1] is not None:
+                if len(self._songs) == 3:
+                    replace_prefix = '<' 
+                self.measurediff(change, 1, replace_prefix)
+
+        for number, tracks in enumerate(zip(*self.measures)):
+            yield '{:<4}[{}]'.format(number + 1, 
+                                     '|'.join(map(str, tracks)))
+
 
 
 def main(args):
@@ -97,7 +169,7 @@ def main(args):
     # print diff
     for line in differ.show():
         print line
-    if len(files) == 2:
+    if len(files) == 2 or not differ.conflicts:
         return 0
     else:
         return 1

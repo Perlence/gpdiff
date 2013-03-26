@@ -18,7 +18,7 @@ def flat_obj(obj, skip_attrs=[]):
     result = []
     result.append(obj.__class__)
     for attr in obj.__attr__:
-        value = getattr(obj, attr)
+        value = getattr(obj, attr, None)
         if attr not in skip_attrs:
             if isinstance(value, list):
                 value = tuple(value)
