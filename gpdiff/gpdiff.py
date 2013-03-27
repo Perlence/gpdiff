@@ -1,15 +1,12 @@
-import os
-import copy
-
 import guitarpro
+import flatten
 import diffutil
 import merge
-import flatten
 
 class GPDiffer(diffutil.Differ):
 
     def __init__(self, songs=[], *args, **kwds):
-        '''Initialise Differ instance with given songs
+        '''Initialize Differ instance with given songs
         '''
         diffutil.Differ.__init__(self, *args, **kwds)
         self.songs = songs
@@ -133,7 +130,7 @@ class GPDiffer(diffutil.Differ):
                 self.store_change(a, pane, x, 'conflict')
 
     def show(self):
-        '''Output somewhat human-readible representation of diff between sequences
+        '''Output somewhat human-readable representation of diff between sequences
         '''
         self.measures = []
         self.tracknumber = [0, 0]
@@ -208,10 +205,18 @@ def main(args):
 if __name__ == '__main__':
     import sys
     import argparse
-    parser = argparse.ArgumentParser(description='Diff and merge Guitar Pro 3-5 files',
-        epilog='''Returns 0 if diff or merge completed without conflicts,
-            returns 1 if confilts occurred,
-            returns 2 if error occurred''')
+    legend = ('Measure diff legend:\n'
+              '  +  inserted measure\n'
+              '  -  removed measure\n'
+              '  !  changed measure in 2-file mode\n'
+              '  >  changed measure of first descendant\n'
+              '  <  changed measure of second descendant\n'
+              '  x  conflict')
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+        description='Diff and merge Guitar Pro 3-5 files\n\n' + legend,
+        epilog='Returns 0 if diff or merge completed without conflicts\n'
+               'Returns 1 if conflicts occurred\n'
+               'Returns 2 if error occurred')
     parser.add_argument('OLDFILE')
     parser.add_argument('MYFILE')
     parser.add_argument('YOURFILE', nargs='?')
