@@ -6,7 +6,7 @@ import diffutil
 import merge
 import flatten
 
-class MuseDiffer(diffutil.Differ):
+class GPDiffer(diffutil.Differ):
 
     def __init__(self, songs=[], *args, **kwds):
         '''Initialise Differ instance with given songs
@@ -65,15 +65,27 @@ class MuseDiffer(diffutil.Differ):
         if isinstance(obj, tuple):
             attr, value = obj
             number = self.get_tracknumber(sequence[:index])
+            if isinstance(value, tuple):
+                if attr == 'strings':
+                    value = reversed(value)
+                    str_value = '({})'.format(', '.join(map(str, value)))
+                else:
+                    str_value = str(value)
+            elif isinstance(value, str):
+                str_value = repr(value)
+            elif isinstance(value, guitarpro.Lyrics):
+                str_value = repr(str(value))
+            else:
+                str_value = str(value)
             if number > 0:
                 yield "{prefix} Track {number}: {attr} = {value}".format(prefix=prefix[action], 
                                                                          number=number + self.tracknumber[pane],
                                                                          attr=attr,
-                                                                         value=value)
+                                                                         value=str_value)
             else:
                 yield "{prefix} Song: {attr} = {value}".format(prefix=prefix[action],
                                                                attr=attr,
-                                                               value=value)
+                                                               value=str_value)
 
     def infodiff(self, change, pane):
         a, b = self._sequences[1], self._sequences[pane * 2]
@@ -136,6 +148,7 @@ class MuseDiffer(diffutil.Differ):
 
         yield 'Attributes'
         yield '=========='
+        yield ''
 
         for change in self.all_changes():
             if change[0] is not None:
@@ -161,7 +174,8 @@ class MuseDiffer(diffutil.Differ):
                     replace_prefix = '<' 
                 self.measurediff(change, 1, replace_prefix)
 
-        yield ' {}'.format(' '.join(map(str, range(1, len(self.measures) + 1))))
+        # yield ' {}'.format(' '.join(map(str, range(1, len(self.measures) + 1))))
+        yield ' ' + ' '.join([str(i) for i, _ in enumerate(self.measures, start=1)])
         for number, tracks in enumerate(zip(*self.measures)):
             yield '[{}] {}'.format('|'.join(map(str, tracks)),
                                   number + 1)
@@ -175,7 +189,7 @@ def main(args):
     files = args.OLDFILE, args.MYFILE, args.YOURFILE
     # parse files
     songs = [guitarpro.parse(f) for f in files if f is not None]
-    differ = MuseDiffer(songs)
+    differ = GPDiffer(songs)
     if len(files) == 3:
         # if output is specified, try to merge
         if args.output is not None:
