@@ -367,6 +367,28 @@ class Differ(object):
                 tag = "replace"
             else:
                 tag = "insert"
+        elif all(m.isEmpty() for m in texts[0][l0:h0]):
+            if l1 != h1 and l2 == h2:
+                tag = "delete"
+            elif l1 != h1:
+                tag = "replace"
+            else:
+                tag = "insert"
+            yield None, (tag, l1, h1, l2, h2)
+            if h2 - l2 < h0 - l0:
+                yield None, ('insert', l1, h1, l0 + (h2 - l2), h0)
+            return
+        elif all(m.isEmpty() for m in texts[2][l2:h2]):
+            if l1 != h1 and l0 == h0:
+                tag = "delete"
+            elif l1 != h1:
+                tag = "replace"
+            else:
+                tag = "insert"
+            yield (tag, l1, h1, l0, h0), None
+            if h0 - l0 < h2 - l2:
+                yield None, ('insert', l1, h1, l2 + (h0 - l0), h2)
+            return
         else:
             tag = "conflict"
         out0 = (tag, l1, h1, l0, h0)

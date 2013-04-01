@@ -76,9 +76,9 @@ def restore(sequence):
             stack.append(settings)
             until = len(gp.TrackSettings.__attr__)
         elif isinstance(e, gp.Measure):
+            e.header.number = measurenumber
             if stack[-1].number == 1:
                 song.measureHeaders.append(e.header)
-            e.number = measurenumber
             stack[-1].measures.append(e)
             measurenumber += 1
         else:
