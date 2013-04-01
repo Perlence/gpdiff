@@ -1,14 +1,18 @@
+import os
+import time
+
 import guitarpro
 import flatten
 import diffutil
 import merge
 
 class GPDiffer(diffutil.Differ):
-
-    def __init__(self, songs=[], *args, **kwds):
+    def __init__(self, files=[], songs=[], *args, **kwds):
         '''Initialize Differ instance with given songs
         '''
         diffutil.Differ.__init__(self, *args, **kwds)
+        self.files = files
+        self.files[0], self.files[1] = files[1], files[0]
         self.songs = songs
 
     def _get_songs(self):
@@ -103,9 +107,14 @@ class GPDiffer(diffutil.Differ):
                 for line in self.print_info(b, pane, x, 'insert'):
                     yield line
         if tag == 'conflict' and pane == 0:
-            for x in range(i1, i2):
-                for line in self.print_info(a, pane, x, 'conflict'):
-                    yield line
+            if i2 - i1 == 0:
+                for x in range(j1, j2):
+                    for line in self.print_info(b, pane, x, 'conflict'):
+                        yield line
+            else:
+                for x in range(i1, i2):
+                    for line in self.print_info(a, pane, x, 'conflict'):
+                        yield line
 
     def measurediff(self, change, pane, replace_prefix='!'):
         a, b = self._sequences[1], self._sequences[pane * 2]
@@ -126,8 +135,12 @@ class GPDiffer(diffutil.Differ):
             for x in range(j1, j2):
                 self.store_change(b, pane, x, 'insert')
         if tag == 'conflict':
-            for x in range(i1, i2):
-                self.store_change(a, pane, x, 'conflict')
+            if i2 - i1 == 0:
+                for x in range(j1, j2):
+                    self.store_change(b, pane, x, 'conflict')
+            else:
+                for x in range(i1, i2):
+                    self.store_change(a, pane, x, 'conflict')
 
     def show(self):
         '''Output somewhat human-readable representation of diff between sequences
@@ -139,10 +152,18 @@ class GPDiffer(diffutil.Differ):
             for j in range(max(len(song.tracks[0].measures) for song in self.songs)):
                 track.append(' ')
             self.measures.append(track)
-        
-        # for change in self.all_changes():
-        #     print change
 
+        # for change in self.all_changes():
+        #     yield change
+
+        getmtime = lambda fn: time.ctime(os.path.getmtime(fn))
+        
+        yield 'OLDFILE:  %s\t%s' % (self.files[1], getmtime(self.files[1]))
+        yield 'MYFILE:   %s\t%s' % (self.files[0], getmtime(self.files[0]))
+        if len(self.songs) > 2:
+            yield 'YOURFILE: %s\t%s' % (self.files[2], getmtime(self.files[2]))
+
+        yield ''
         yield 'Attributes'
         yield '=========='
         yield ''
@@ -171,22 +192,19 @@ class GPDiffer(diffutil.Differ):
                     replace_prefix = '<' 
                 self.measurediff(change, 1, replace_prefix)
 
-        # yield ' {}'.format(' '.join(map(str, range(1, len(self.measures) + 1))))
         yield ' ' + ' '.join([str(i) for i, _ in enumerate(self.measures, start=1)])
         for number, tracks in enumerate(zip(*self.measures)):
             yield '[{}] {}'.format('|'.join(map(str, tracks)),
                                   number + 1)
-                                  
-
 
 
 def main(args):
     '''Command line interface
     '''
-    files = args.OLDFILE, args.MYFILE, args.YOURFILE
+    files = [args.OLDFILE, args.MYFILE, args.YOURFILE]
     # parse files
     songs = [guitarpro.parse(f) for f in files if f is not None]
-    differ = GPDiffer(songs)
+    differ = GPDiffer(files, songs)
     if len(files) == 3:
         # if output is specified, try to merge
         if args.output is not None:
