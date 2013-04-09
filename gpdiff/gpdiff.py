@@ -88,7 +88,7 @@ class GPDiffer(diffutil.Differ):
                                                                attr=attr,
                                                                value=str_value)
 
-    def infodiff(self, change, pane):
+    def infodiff(self, change, pane, replace_prefix='!'):
         a, b = self._sequences[1], self._sequences[pane * 2]
         tag, i1, i2, j1, j2 = change[pane]
         if tag == 'replace':
@@ -106,7 +106,8 @@ class GPDiffer(diffutil.Differ):
             for x in range(j1, j2):
                 for line in self.print_info(b, pane, x, 'insert'):
                     yield line
-        if tag == 'conflict' and pane == 0:
+        if tag == 'conflict':
+            yield replace_prefix * 8
             if i2 - i1 == 0:
                 for x in range(j1, j2):
                     for line in self.print_info(b, pane, x, 'conflict'):
@@ -123,11 +124,16 @@ class GPDiffer(diffutil.Differ):
             if i2 - i1 == j2 - j1:
                 for x in range(i1, i2):
                     self.store_change(a, pane, x, 'replace', replace_prefix)
-            else:
-                for x in range(i1, i2):
-                    self.store_change(a, pane, x, 'delete')
-                for x in range(j1, j2):
+            elif i2 - i1 < j2 - j1:
+                for x in range(j1, j1 + i2 - i1):
+                    self.store_change(b, pane, x, 'replace', replace_prefix)
+                for x in range(j1 + i2 - i1, j2):
                     self.store_change(b, pane, x, 'insert')
+            else:
+                for x in range(i1, i1 + j2 - j1):
+                    self.store_change(a, pane, x, 'replace', replace_prefix)
+                for x in range(i1 + j2 - j1, i2):
+                    self.store_change(a, pane, x, 'delete')
         if tag == 'delete':
             for x in range(i1, i2):
                 self.store_change(a, pane, x, 'delete')
@@ -153,6 +159,11 @@ class GPDiffer(diffutil.Differ):
                 track.append(' ')
             self.measures.append(track)
 
+        if len(self._songs) == 3:
+            replace_prefix = '><'
+        else:
+            replace_prefix = '!!'
+
         # for change in self.all_changes():
         #     yield change
 
@@ -170,10 +181,10 @@ class GPDiffer(diffutil.Differ):
 
         for change in self.all_changes():
             if change[0] is not None:
-                for line in self.infodiff(change, 0):
+                for line in self.infodiff(change, 0, replace_prefix[0]):
                     yield line
             if change[1] is not None:
-                for line in self.infodiff(change, 1):
+                for line in self.infodiff(change, 1, replace_prefix[1]):
                     yield line
 
         yield ''
@@ -181,16 +192,11 @@ class GPDiffer(diffutil.Differ):
         yield '========'
         yield ''
 
-        replace_prefix = '!'
         for change in self.all_changes():
             if change[0] is not None:
-                if len(self._songs) == 3:
-                    replace_prefix = '>'
-                self.measurediff(change, 0, replace_prefix)
+                self.measurediff(change, 0, replace_prefix[0])
             if change[1] is not None:
-                if len(self._songs) == 3:
-                    replace_prefix = '<' 
-                self.measurediff(change, 1, replace_prefix)
+                self.measurediff(change, 1, replace_prefix[1])
 
         yield ' ' + ' '.join([str(i) for i, _ in enumerate(self.measures, start=1)])
         for number, tracks in enumerate(zip(*self.measures)):

@@ -19,6 +19,8 @@ import difflib
 
 from matchers import MyersSequenceMatcher
 
+import guitarpro
+
 ################################################################################
 #
 # Differ
@@ -367,7 +369,7 @@ class Differ(object):
                 tag = "replace"
             else:
                 tag = "insert"
-        elif all(m.isEmpty() for m in texts[0][l0:h0]):
+        elif all(isinstance(m, guitarpro.Measure) and m.isEmpty() for m in texts[0][l0:h0]):
             if l1 != h1 and l2 == h2:
                 tag = "delete"
             elif l1 != h1:
@@ -378,7 +380,7 @@ class Differ(object):
             if h2 - l2 < h0 - l0:
                 yield None, ('insert', l1, h1, l0 + (h2 - l2), h0)
             return
-        elif all(m.isEmpty() for m in texts[2][l2:h2]):
+        elif all(isinstance(m, guitarpro.Measure) and m.isEmpty() for m in texts[2][l2:h2]):
             if l1 != h1 and l0 == h0:
                 tag = "delete"
             elif l1 != h1:
