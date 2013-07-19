@@ -64,7 +64,7 @@ def restore(sequence):
             song.tracks.append(track)
             stack.append(track)
             tracknumber += 1
-            measurenumber = 0
+            measurenumber = 1
         elif e == gp.MidiChannel:
             channel = e()
             track.channel = channel
