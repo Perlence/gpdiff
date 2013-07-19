@@ -9,19 +9,22 @@ import merge
 class GPDiffer(diffutil.Differ):
     def __init__(self, files=[], songs=[], *args, **kwds):
         '''Initialize Differ instance with given songs
+
+        :param files: list of 2 or 3 tabs: [O, A, B] or [O, A]. 
+            Internally it transforms into [A, O, B] and [A, O] respectively.
         '''
         diffutil.Differ.__init__(self, *args, **kwds)
-        self.files = files
+        self.files = files[:]
         self.files[0], self.files[1] = files[1], files[0]
         self.songs = songs
 
     def _get_songs(self):
-        songs = self._songs
+        songs = self._songs[:]
         songs[0], songs[1] = self._songs[1], self._songs[0]
         return songs
 
     def _set_songs(self, songs):
-        self._songs = songs
+        self._songs = songs[:]
         self._songs[0], self._songs[1] = songs[1], songs[0]
         self._sequences = map(flatten.flatten, self._songs)
         for _ in self.set_sequences_iter(self._sequences): 
