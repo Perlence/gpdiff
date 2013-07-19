@@ -198,27 +198,34 @@ class GPDiffer(diffutil.Differ):
             if change[1] is not None:
                 self.measurediff(change, 1, replace_prefix[1])
 
+        block = False
+
         yield ' ' + ' '.join([str(i) for i, _ in enumerate(self.measures, start=1)])
         for number, tracks in enumerate(zip(*self.measures)):
-            yield '[{}] {}'.format('|'.join(map(str, tracks)),
-                                  number + 1)
+            if any(x != ' ' for x in tracks):
+                yield '[{}] {}'.format('|'.join(map(str, tracks)),
+                                       number + 1)
+                block = True
+            else:
+                if block:
+                    yield ''
+                block = False
 
 
 def main(args):
     '''Command line interface
     '''
     files = [args.OLDFILE, args.MYFILE, args.YOURFILE]
-    # parse files
+    # Parse files
     songs = [guitarpro.parse(f) for f in files if f is not None]
     differ = GPDiffer(files, songs)
     if len(files) == 3:
-        # if output is specified, try to merge
+        # If output is specified, try to merge
         if args.output is not None:
             result = differ.merge()
             guitarpro.write(result, args.output, format=args.format)
             if not len(differ.conflicts):
                 return 0
-    # print diff
     for line in differ.show():
         print line
     if len(files) == 2 or not differ.conflicts:
