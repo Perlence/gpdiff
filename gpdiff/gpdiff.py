@@ -10,8 +10,10 @@ class GPDiffer(diffutil.Differ):
     def __init__(self, files=[], songs=[], *args, **kwds):
         '''Initialize Differ instance with given songs
 
-        :param files: list of 2 or 3 tabs: [O, A, B] or [O, A]. 
-            Internally it transforms into [A, O, B] and [A, O] respectively.
+        :param files: list of 2 or 3 file names: [O, A, B] or [O, A]. 
+        :param songs: list of 2 or 3 parsed tabs.
+        
+        Internally these lists transform into [A, O, B] and [A, O] respectively.
         '''
         diffutil.Differ.__init__(self, *args, **kwds)
         self.files = files[:]
