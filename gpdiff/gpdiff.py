@@ -1,18 +1,66 @@
+import argparse
 import os
+import sys
 import time
 
 import guitarpro
-import flatten
-import diffutil
-import merge
+
+from . import flatten
+from . import diffutil
+from . import merge
+
+
+def main():
+    legend = ('Measure diff legend:\n'
+              '  +  inserted measure\n'
+              '  -  removed measure\n'
+              '  !  changed measure in 2-file mode\n'
+              '  >  changed measure of first descendant\n'
+              '  <  changed measure of second descendant\n'
+              '  x  conflict')
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description='Diff and merge Guitar Pro 3-5 files\n\n' + legend,
+        epilog='Returns 0 if diff or merge completed without conflicts\n'
+               'Returns 1 if conflicts occurred\n'
+               'Returns 2 if error occurred')
+    parser.add_argument('OLDFILE')
+    parser.add_argument('MYFILE')
+    parser.add_argument('YOURFILE', nargs='?')
+    parser.add_argument('-o', dest='output', metavar='OUTPUT', help='path to output merged file')
+    parser.add_argument('-f', dest='format', choices=['gp3', 'gp4', 'gp5'], help='output file format')
+    args = parser.parse_args()
+    sys.exit(cli(args))
+
+
+def cli(args):
+    """Command line interface."""
+    files = [args.OLDFILE, args.MYFILE, args.YOURFILE]
+    # Parse files
+    songs = [guitarpro.parse(f) for f in files if f is not None]
+    differ = GPDiffer(files, songs)
+    if len(files) == 3:
+        # If output is specified, try to merge
+        if args.output is not None:
+            result = differ.merge()
+            guitarpro.write(result, args.output, format=args.format)
+            if not len(differ.conflicts):
+                return 0
+    for line in differ.show():
+        print(line)
+    if len(files) == 2 or not differ.conflicts:
+        return 0
+    else:
+        return 1
+
 
 class GPDiffer(diffutil.Differ):
     def __init__(self, files=[], songs=[], *args, **kwds):
         '''Initialize Differ instance with given songs
 
-        :param files: list of 2 or 3 file names: [O, A, B] or [O, A]. 
+        :param files: list of 2 or 3 file names: [O, A, B] or [O, A].
         :param songs: list of 2 or 3 parsed tabs.
-        
+
         Internally these lists transform into [A, O, B] and [A, O] respectively.
         '''
         diffutil.Differ.__init__(self, *args, **kwds)
@@ -28,8 +76,8 @@ class GPDiffer(diffutil.Differ):
     def _set_songs(self, songs):
         self._songs = songs[:]
         self._songs[0], self._songs[1] = songs[1], songs[0]
-        self._sequences = map(flatten.flatten, self._songs)
-        for _ in self.set_sequences_iter(self._sequences): 
+        self._sequences = list(map(flatten.flatten, self._songs))
+        for _ in self.set_sequences_iter(self._sequences):
             pass
 
     songs = property(_get_songs, _set_songs)
@@ -40,7 +88,7 @@ class GPDiffer(diffutil.Differ):
         merger = merge.Merger()
         merger.differ = self
         merger.texts = self._sequences
-        for result in merger.merge_3_files(mark_conflicts=False): 
+        for result in merger.merge_3_files(mark_conflicts=False):
             pass
         return result
 
@@ -52,16 +100,17 @@ class GPDiffer(diffutil.Differ):
         return flatten.restore(merged_sequence)
 
     def get_tracknumber(self, sequence):
-        tracks = filter(lambda x: x == guitarpro.Track, sequence)
+        tracks = [x for x in sequence if x is guitarpro.Track]
         return len(tracks)
 
     def store_change(self, sequence, pane, index, action, replace_prefix='!'):
         prefix = dict(insert='+', delete='-', replace=replace_prefix, conflict='x', equal=' ')
         obj = sequence[index]
         if isinstance(obj, guitarpro.Measure):
-            track_number = obj.track.number + self.tracknumber[pane] - 1
-            self.measures[track_number][obj.number() - 1] = prefix[action]
-        elif obj == guitarpro.Track:
+            measure = obj
+            track_number = measure.track.number + self.tracknumber[pane] - 1
+            self.measures[track_number][measure.number - 1] = prefix[action]
+        elif obj is guitarpro.Track:
             if action == 'insert':
                 self.tracknumber[1 - pane] += 1
 
@@ -84,7 +133,7 @@ class GPDiffer(diffutil.Differ):
             else:
                 str_value = str(value)
             if number > 0:
-                yield "{prefix} Track {number}: {attr} = {value}".format(prefix=prefix[action], 
+                yield "{prefix} Track {number}: {attr} = {value}".format(prefix=prefix[action],
                                                                          number=number + self.tracknumber[pane],
                                                                          attr=attr,
                                                                          value=str_value)
@@ -172,8 +221,9 @@ class GPDiffer(diffutil.Differ):
         # for change in self.all_changes():
         #     yield change
 
-        getmtime = lambda fn: time.ctime(os.path.getmtime(fn))
-        
+        def getmtime(fn):
+            return time.ctime(os.path.getmtime(fn))
+
         yield 'OLDFILE:  %s\t%s' % (self.files[1], getmtime(self.files[1]))
         yield 'MYFILE:   %s\t%s' % (self.files[0], getmtime(self.files[0]))
         if len(self.songs) > 2:
@@ -217,46 +267,5 @@ class GPDiffer(diffutil.Differ):
                 block = False
 
 
-def main(args):
-    '''Command line interface
-    '''
-    files = [args.OLDFILE, args.MYFILE, args.YOURFILE]
-    # Parse files
-    songs = [guitarpro.parse(f) for f in files if f is not None]
-    differ = GPDiffer(files, songs)
-    if len(files) == 3:
-        # If output is specified, try to merge
-        if args.output is not None:
-            result = differ.merge()
-            guitarpro.write(result, args.output, format=args.format)
-            if not len(differ.conflicts):
-                return 0
-    for line in differ.show():
-        print line
-    if len(files) == 2 or not differ.conflicts:
-        return 0
-    else:
-        return 1
-
 if __name__ == '__main__':
-    import sys
-    import argparse
-    legend = ('Measure diff legend:\n'
-              '  +  inserted measure\n'
-              '  -  removed measure\n'
-              '  !  changed measure in 2-file mode\n'
-              '  >  changed measure of first descendant\n'
-              '  <  changed measure of second descendant\n'
-              '  x  conflict')
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='Diff and merge Guitar Pro 3-5 files\n\n' + legend,
-        epilog='Returns 0 if diff or merge completed without conflicts\n'
-               'Returns 1 if conflicts occurred\n'
-               'Returns 2 if error occurred')
-    parser.add_argument('OLDFILE')
-    parser.add_argument('MYFILE')
-    parser.add_argument('YOURFILE', nargs='?')
-    parser.add_argument('-o', dest='output', metavar='OUTPUT', help='path to output merged file')
-    parser.add_argument('-f', dest='format', choices=['gp3', 'gp4', 'gp5'], help='output file format')
-    args = parser.parse_args()
-    sys.exit(main(args))
+    main()

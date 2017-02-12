@@ -1,28 +1,26 @@
-### Copyright (C) 2009 Piotr Piastucki <the_leech@users.berlios.de>
+# Copyright (C) 2009 Piotr Piastucki <the_leech@users.berlios.de>
 
-### This program is free software; you can redistribute it and/or modify
-### it under the terms of the GNU General Public License as published by
-### the Free Software Foundation; either version 2 of the License, or
-### (at your option) any later version.
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
 
-### This program is distributed in the hope that it will be useful,
-### but WITHOUT ANY WARRANTY; without even the implied warranty of
-### MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-### GNU General Public License for more details.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 
-### You should have received a copy of the GNU General Public License
-### along with this program; if not, write to the Free Software
-### Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-import diffutil
-import matchers
-#from _patiencediff_py import PatienceSequenceMatcher_py as PatienceSequenceMatcher
+from . import diffutil
+from . import matchers
 
 
 class AutoMergeDiffer(diffutil.Differ):
 
     _matcher = matchers.MyersSequenceMatcher
-   # _matcher = PatienceSequenceMatcher
 
     def __init__(self):
         diffutil.Differ.__init__(self)
@@ -57,26 +55,6 @@ class AutoMergeDiffer(diffutil.Differ):
                             out1 = ('conflict', s1, e1, l2 + chunk[3], l2 + chunk[4])
                             yield out0, out1
                     return
-#                elif len0 > 0 and len2 > 0:
-                    # this logic will resolve more conflicts automatically, but unresolved conflicts may sometimes look confusing
-                    # as the line numbers in ancestor file will be interpolated and may not reflect the actual changes
-#                    matcher = self._matcher(None, texts[0][l0:h0], texts[2][l2:h2])
-#                    if len0 > len2:
-#                        maxindex = 1
-#                        maxlen = len0
-#                    else:
-#                        maxindex = 3
-#                        maxlen = len2
-#                    for chunk in matcher.get_opcodes():
-#                        if chunk[0] == 'equal':
-#                            out0 = ('replace', l1 + len1 * chunk[maxindex] / maxlen, l1 + len1 * chunk[maxindex + 1] / maxlen, l0 + chunk[1], l0 + chunk[2])
-#                            out1 = ('replace', l1 + len1 * chunk[maxindex] / maxlen, l1 + len1 * chunk[maxindex + 1] / maxlen, l2 + chunk[3], l2 + chunk[4])
-#                            yield out0, out1
-#                        else:
-#                            out0 = ('conflict', l1 + len1 * chunk[maxindex] / maxlen, l1 + len1 * chunk[maxindex + 1] / maxlen, l0 + chunk[1], l0 + chunk[2])
-#                            out1 = ('conflict', l1 + len1 * chunk[maxindex] / maxlen, l1 + len1 * chunk[maxindex + 1] / maxlen, l2 + chunk[3], l2 + chunk[4])
-#                            yield out0, out1
-#                    return
                 else:
                     # some tricks to resolve even more conflicts automatically
                     # unfortunately the resulting chunks cannot be used to highlight changes
@@ -93,14 +71,14 @@ class AutoMergeDiffer(diffutil.Differ):
                         # delete + delete (any length) -> split into delete/conflict
                         seq0 = seq1 = None
                         while 1:
-                            if seq0 == None:
+                            if seq0 is None:
                                 try:
                                     seq0 = using[0].pop(0)
                                     i0 = seq0[1]
                                     end0 = seq0[4]
                                 except IndexError:
                                     break
-                            if seq1 == None:
+                            if seq1 is None:
                                 try:
                                     seq1 = using[1].pop(0)
                                     i1 = seq1[1]
@@ -160,6 +138,7 @@ class AutoMergeDiffer(diffutil.Differ):
     def get_unresolved_count(self):
         return len(self.unresolved)
 
+
 class Merger(diffutil.Differ):
 
     def __init__(self, ):
@@ -170,7 +149,7 @@ class Merger(diffutil.Differ):
 
     def initialize(self, sequences, texts):
         step = self.differ.set_sequences_iter(sequences)
-        while step.next() == None:
+        while step.next() is None:
             yield None
         self.texts = texts
         yield 1
@@ -197,16 +176,16 @@ class Merger(diffutil.Differ):
         for change in self.differ.all_changes():
             yield None
             low_mark = lastline
-            if change[0] != None:
+            if change[0] is not None:
                 low_mark = change[0][LO]
-            if change[1] != None:
+            if change[1] is not None:
                 if change[1][LO] > low_mark:
                     low_mark = change[1][LO]
             for i in range(lastline, low_mark, 1):
                 mergedtext.append(self.texts[1][i])
             mergedline += low_mark - lastline
             lastline = low_mark
-            if change[0] != None and change[1] != None and change[0][0] == 'conflict':
+            if change[0] is not None and change[1] is not None and change[0][0] == 'conflict':
                 high_mark = max(change[0][HI], change[1][HI])
                 if mark_conflicts:
                     if low_mark < high_mark:
@@ -215,13 +194,11 @@ class Merger(diffutil.Differ):
                             self.unresolved.append(mergedline)
                             mergedline += 1
                     else:
-                        #conflictsize = min(1, max(change[0][HI + 2] - change[0][LO + 2], change[1][HI + 2] - change[1][LO + 2]))
-                        #for i in range(conflictsize):
                         mergedtext.append("(??)")
                         self.unresolved.append(mergedline)
                         mergedline += 1
                     lastline = high_mark
-            elif change[0] != None:
+            elif change[0] is not None:
                 lastline += self._apply_change(self.texts[0], change[0], mergedtext)
                 mergedline += change[0][HI + 2] - change[0][LO + 2]
             else:

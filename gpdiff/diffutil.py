@@ -1,31 +1,27 @@
-### Copyright (C) 2002-2006 Stephen Kennedy <stevek@gnome.org>
-### Copyright (C) 2009 Kai Willadsen <kai.willadsen@gmail.com>
+# Copyright (C) 2002-2006 Stephen Kennedy <stevek@gnome.org>
+# Copyright (C) 2009 Kai Willadsen <kai.willadsen@gmail.com>
 
-### This program is free software; you can redistribute it and/or modify
-### it under the terms of the GNU General Public License as published by
-### the Free Software Foundation; either version 2 of the License, or
-### (at your option) any later version.
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
 
-### This program is distributed in the hope that it will be useful,
-### but WITHOUT ANY WARRANTY; without even the implied warranty of
-### MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-### GNU General Public License for more details.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 
-### You should have received a copy of the GNU General Public License
-### along with this program; if not, write to the Free Software
-### Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 import difflib
 
-from matchers import MyersSequenceMatcher
-
 import guitarpro
 
-################################################################################
-#
-# Differ
-#
-################################################################################
+from .matchers import MyersSequenceMatcher
+
+
 class IncrementalSequenceMatcher(difflib.SequenceMatcher):
     def __init__(self, isjunk=None, a="", b=""):
         difflib.SequenceMatcher.__init__(self, isjunk, a, b)
@@ -39,36 +35,33 @@ class IncrementalSequenceMatcher(difflib.SequenceMatcher):
             i, j, k = x = self.find_longest_match(alo, ahi, blo, bhi)
             if k:
                 yield None
-                done.append( (i,x) )
+                done.append((i, x))
                 if alo < i and blo < j:
-                    todo.append( (alo, i, blo, j) )
+                    todo.append((alo, i, blo, j))
                 if i+k < ahi and j+k < bhi:
-                    todo.append( (i+k, ahi, j+k, bhi) )
-        done.append( (la, (la, lb, 0)) )
+                    todo.append((i+k, ahi, j+k, bhi))
+        done.append((la, (la, lb, 0)))
         done.sort()
-        self.matching_blocks = [x[1] for x in done]
+        self.matching_blocks = [y[1] for y in done]
         yield 1
 
     def get_difference_opcodes(self):
-        return filter(lambda x: x[0]!="equal", self.get_opcodes())
+        return filter(lambda x: x[0] != "equal", self.get_opcodes())
 
 
 opcode_reverse = {
-    "replace"  : "replace",
-    "insert"   : "delete",
-    "delete"   : "insert",
-    "conflict" : "conflict",
-    "equal"    : "equal"
+    "replace": "replace",
+    "insert": "delete",
+    "delete": "insert",
+    "conflict": "conflict",
+    "equal": "equal",
 }
+
 
 def reverse_chunk(chunk):
     return opcode_reverse[chunk[0]], chunk[3], chunk[4], chunk[1], chunk[2]
 
-################################################################################
-#
-# Differ
-#
-################################################################################
+
 class Differ(object):
     """Utility class to hold diff2 or diff3 chunks"""
 
@@ -124,6 +117,7 @@ class Differ(object):
             self._line_cache[i] = [(None, None, None)] * (l + 1)
 
         last_chunk = len(self._merge_cache)
+
         def find_next(diff, seq, current):
             next_chunk = None
             if seq == 1 and current + 1 < last_chunk:
@@ -208,8 +202,8 @@ class Differ(object):
         return len(self.diffs[whichdiffs])
 
     def get_chunk(self, index, from_pane, to_pane=None):
-        """Return the index-th change in from_pane
-        
+        """Return the index-th change in from_pane.
+
         If to_pane is provided, then only changes between from_pane and to_pane
         are considered, otherwise all changes starting at from_pane are used.
         """
@@ -242,12 +236,12 @@ class Differ(object):
                 return (self._has_mergeable_changes[0], False)
             else:
                 return self._has_mergeable_changes
-        else: # which == 2
+        else:  # which == 2
             return (self._has_mergeable_changes[1], False)
 
     def _change_sequence(self, which, sequence, startidx, sizechange, texts):
         diffs = self.diffs[which]
-        lines_added = [0,0,0]
+        lines_added = [0, 0, 0]
         lines_added[sequence] = sizechange
         loidx = self._locate_chunk(which, sequence, startidx)
         if sizechange < 0:
@@ -258,28 +252,25 @@ class Differ(object):
             loidx -= 1
             lorange = diffs[loidx][3], diffs[loidx][1]
         else:
-            lorange = (0,0)
+            lorange = (0, 0)
         x = which*2
         if hiidx < len(diffs):
             hiidx += 1
             hirange = diffs[hiidx-1][4], diffs[hiidx-1][2]
         else:
             hirange = self.seqlength[x], self.seqlength[1]
-        #print "diffs", loidx, hiidx, len(diffs), lorange, hirange #diffs[loidx], diffs[hiidx-1]
         rangex = lorange[0], hirange[0] + lines_added[x]
         range1 = lorange[1], hirange[1] + lines_added[1]
-        #print "^^^^^", rangex, range1
         assert rangex[0] <= rangex[1] and range1[0] <= range1[1]
         linesx = texts[x][rangex[0]:rangex[1]]
         lines1 = texts[1][range1[0]:range1[1]]
-        #print "<<<\n%s\n===\n%s\n>>>" % ("\n".join(linesx),"\n".join(lines1))
         newdiffs = self._matcher(None, lines1, linesx).get_difference_opcodes()
-        newdiffs = [ (c[0], c[1]+range1[0],c[2]+range1[0], c[3]+rangex[0],c[4]+rangex[0]) for c in newdiffs]
+        newdiffs = [(c[0], c[1]+range1[0], c[2]+range1[0], c[3]+rangex[0], c[4]+rangex[0]) for c in newdiffs]
         if hiidx < len(self.diffs[which]):
-            self.diffs[which][hiidx:] = [ (c[0],
-                                           c[1] + lines_added[1], c[2] + lines_added[1],
-                                           c[3] + lines_added[x], c[4] + lines_added[x])
-                                                for c in self.diffs[which][hiidx:] ]
+            self.diffs[which][hiidx:] = [(c[0],
+                                          c[1] + lines_added[1], c[2] + lines_added[1],
+                                          c[3] + lines_added[x], c[4] + lines_added[x])
+                                         for c in self.diffs[which][hiidx:]]
         self.diffs[which][loidx:hiidx] = newdiffs
 
     def _range_from_lines(self, textindex, lines):
@@ -333,7 +324,7 @@ class Differ(object):
             merge_cache = self._merge_cache[start:end + 1]
         else:
             merge_cache = self._merge_cache
-        if textindex in (0,2):
+        if textindex in (0, 2):
             seq = textindex/2
             for cs in merge_cache:
                 if cs[seq]:
@@ -347,12 +338,12 @@ class Differ(object):
         return self.diffs == [[], []] and self._initialised
 
     def _merge_blocks(self, using):
-        LO, HI = 1,2
-        lowc  =  min(using[0][ 0][LO], using[1][ 0][LO])
-        highc =  max(using[0][-1][HI], using[1][-1][HI])
+        LO, HI = 1, 2
+        lowc = min(using[0][0][LO], using[1][0][LO])
+        highc = max(using[0][-1][HI], using[1][-1][HI])
         low = []
         high = []
-        for i in (0,1):
+        for i in (0, 1):
             d = using[i][0]
             low.append(lowc - d[LO] + d[2+LO])
             d = using[i][-1]
@@ -400,7 +391,7 @@ class Differ(object):
     def _merge_diffs(self, seq0, seq1, texts):
         seq0, seq1 = seq0[:], seq1[:]
         seq = seq0, seq1
-        LO, HI = 1,2
+        LO, HI = 1, 2
         while len(seq0) or len(seq1):
             if len(seq0) == 0:
                 high_seq = 1
@@ -435,11 +426,11 @@ class Differ(object):
                     (high_seq, other_seq) = (other_seq, high_seq)
                     high_mark = other_diff[HI]
 
-            if len(using[0])==0:
-                assert len(using[1])==1
+            if len(using[0]) == 0:
+                assert len(using[1]) == 1
                 yield None, using[1][0]
-            elif len(using[1])==0:
-                assert len(using[0])==1
+            elif len(using[1]) == 0:
+                assert len(using[0]) == 1
                 yield using[0][0], None
             else:
                 for c in self._auto_merge(using, texts):
@@ -454,7 +445,7 @@ class Differ(object):
         for i in range(self.num_sequences - 1):
             matcher = self._matcher(None, sequences[1], sequences[i * 2])
             work = matcher.initialise()
-            while work.next() is None:
+            while next(work) is None:
                 yield None
             self.diffs[i] = matcher.get_difference_opcodes()
         self._initialised = True

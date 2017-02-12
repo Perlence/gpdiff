@@ -8,11 +8,17 @@ setup(
     author_email='dust.harvesting@gmail.com',
     url='https://bitbucket.org/Perlence/gpdiff/',
     platforms=['Windows', 'POSIX', 'Unix', 'MacOS X'],
-    license='zlib/libpng',
+    license='GPL',
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
+    entry_points={
+        'console_scripts': [
+            'gpdiff = gpdiff.gpdiff:main',
+        ],
+    },
     install_requires=[
+        'attrs',
         'PyGuitarPro',
     ],
     classifiers=[
@@ -26,7 +32,8 @@ setup(
         'Operating System :: Unix',
         'Operating System :: MacOS :: MacOS X',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.4',
         'Topic :: Artistic Software',
         'Topic :: Multimedia :: Sound/Audio',
     ],
