@@ -8,6 +8,7 @@ import guitarpro as gp
 def flatten(song):
     """Convert Song into list."""
     result = []
+    song = map_attrs(hashable_attrs, song)
     result.extend(flat_obj(song, expand=['pageSetup'], skip=['tracks']))
     for track in song.tracks:
         result.extend(flat_obj(track, expand=['channel', 'settings'], skip=['measures']))
@@ -50,14 +51,15 @@ def restore(sequence):
             stack.append(settings)
             until = len(attr.fields(gp.TrackSettings))
         elif isinstance(e, gp.Measure):
+            e = restore_attrs(None, e)
             e.track = top
             e.number = measure_number
             e.track.measures.append(e)
             measure_number += 1
         else:
             attr_name, value = e
-            if isinstance(value, tuple):
-                value = list(value)
+            attrib = getattr(type(top), attr_name)
+            value = restore_attrs(attrib, value)
             setattr(top, attr_name, value)
             if until is not None:
                 if until > 1:
@@ -74,7 +76,7 @@ def flat_obj(obj, expand=[], skip=[]):
 
     >>> import guitarpro as gp
     >>> note = gp.Note()
-    >>> flat_obj(note) #doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+    >>> flat_obj(note)
     [<class 'guitarpro.models.Note'>,
      ('value', 0), ('velocity', 95),
      ('string', 1),
@@ -86,7 +88,7 @@ def flat_obj(obj, expand=[], skip=[]):
     cls = type(obj)
     yield cls
     for attrib in attr.fields(cls):
-        if not attrib.hash:
+        if not attrib.cmp:
             continue
         attr_name = attrib.name
         if attr_name in skip:
@@ -98,3 +100,33 @@ def flat_obj(obj, expand=[], skip=[]):
         if isinstance(value, list):
             value = tuple(value)
         yield (attr_name, value)
+
+
+def map_attrs(func, obj):
+    fields = attr.fields(type(obj))
+    for attrib in fields:
+        value = getattr(obj, attrib.name)
+        new_value = func(attrib, value)
+        if value != new_value:
+            obj = attr.assoc(obj, **{attrib.name: new_value})
+    return obj
+
+
+def hashable_attrs(attrib, value):
+    if attrib is not None and not attrib.cmp:
+        return value
+    if isinstance(value, list):
+        value = tuple(hashable_attrs(None, item) for item in value)
+    elif attr.has(type(value)):
+        value = map_attrs(hashable_attrs, value)
+    return value
+
+
+def restore_attrs(attrib, value):
+    if attrib is not None and not attrib.cmp:
+        return value
+    if isinstance(value, tuple):
+        value = [restore_attrs(None, item) for item in value]
+    elif attr.has(type(value)):
+        value = map_attrs(restore_attrs, value)
+    return value
