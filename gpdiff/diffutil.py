@@ -1,52 +1,22 @@
 # Copyright (C) 2002-2006 Stephen Kennedy <stevek@gnome.org>
-# Copyright (C) 2009 Kai Willadsen <kai.willadsen@gmail.com>
-
-# This program is free software; you can redistribute it and/or modify
+# Copyright (C) 2009, 2012-2013 Kai Willadsen <kai.willadsen@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
+# the Free Software Foundation, either version 2 of the License, or (at
+# your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-
-import difflib
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import guitarpro
 
-from .matchers import MyersSequenceMatcher
-
-
-class IncrementalSequenceMatcher(difflib.SequenceMatcher):
-    def __init__(self, isjunk=None, a="", b=""):
-        difflib.SequenceMatcher.__init__(self, isjunk, a, b)
-
-    def initialise(self):
-        la, lb = len(self.a), len(self.b)
-        todo = [(0, la, 0, lb)]
-        done = []
-        while len(todo):
-            alo, ahi, blo, bhi = todo.pop(0)
-            i, j, k = x = self.find_longest_match(alo, ahi, blo, bhi)
-            if k:
-                yield None
-                done.append((i, x))
-                if alo < i and blo < j:
-                    todo.append((alo, i, blo, j))
-                if i+k < ahi and j+k < bhi:
-                    todo.append((i+k, ahi, j+k, bhi))
-        done.append((la, (la, lb, 0)))
-        done.sort()
-        self.matching_blocks = [y[1] for y in done]
-        yield 1
-
-    def get_difference_opcodes(self):
-        return [x for x in self.get_opcodes() if x[0] != "equal"]
+from .myers import DiffChunk, MyersSequenceMatcher, SyncPointMyersSequenceMatcher
 
 
 opcode_reverse = {
@@ -54,34 +24,72 @@ opcode_reverse = {
     "insert": "delete",
     "delete": "insert",
     "conflict": "conflict",
-    "equal": "equal",
+    "equal": "equal"
 }
 
 
+def merged_chunk_order(merged_chunk):
+    if not merged_chunk:
+        return 0
+    chunk = merged_chunk[0] or merged_chunk[1]
+    return chunk.start_a
+
+
 def reverse_chunk(chunk):
-    return opcode_reverse[chunk[0]], chunk[3], chunk[4], chunk[1], chunk[2]
+    tag = opcode_reverse[chunk[0]]
+    return DiffChunk._make((tag, chunk[3], chunk[4], chunk[1], chunk[2]))
+
+
+def consume_blank_lines(chunk, texts, pane1, pane2):
+    if chunk is None:
+        return None
+
+    def _find_blank_lines(txt, lo, hi):
+        while lo < hi and not txt[lo]:
+            lo += 1
+        while lo < hi and not txt[hi - 1]:
+            hi -= 1
+        return lo, hi
+
+    tag = chunk.tag
+    c1, c2 = _find_blank_lines(texts[pane1], chunk[1], chunk[2])
+    c3, c4 = _find_blank_lines(texts[pane2], chunk[3], chunk[4])
+
+    if c1 == c2 and c3 == c4:
+        return None
+    if c1 == c2 and tag == "replace":
+        tag = "insert"
+    elif c3 == c4 and tag == "replace":
+        tag = "delete"
+    return DiffChunk._make((tag, c1, c2, c3, c4))
 
 
 class Differ(object):
     """Utility class to hold diff2 or diff3 chunks"""
 
     _matcher = MyersSequenceMatcher
+    _sync_matcher = SyncPointMyersSequenceMatcher
 
     def __init__(self):
         # Internally, diffs are stored from text1 -> text0 and text1 -> text2.
         self.num_sequences = 0
         self.seqlength = [0, 0, 0]
         self.diffs = [[], []]
+        self.syncpoints = []
         self.conflicts = []
+        self._old_merge_cache = set()
+        self._changed_chunks = tuple()
         self._merge_cache = []
         self._line_cache = [[], [], []]
         self.ignore_blanks = False
         self._initialised = False
-        self._has_mergeable_changes = (False, False)
+        self._has_mergeable_changes = (False, False, False, False)
 
     def _update_merge_cache(self, texts):
         if self.num_sequences == 3:
-            self._merge_cache = [c for c in self._merge_diffs(self.diffs[0], self.diffs[1], texts)]
+            self._merge_cache = [c for c in self._merge_diffs(self.diffs[0],
+                                                              self.diffs[1],
+                                                              texts)]
         else:
             self._merge_cache = [(c, None) for c in self.diffs[0]]
 
@@ -89,9 +97,19 @@ class Differ(object):
             # We don't handle altering the chunk-type of conflicts in three-way
             # comparisons where e.g., pane 1 and 3 differ in blank lines
             for i, c in enumerate(self._merge_cache):
-                self._merge_cache[i] = (self._consume_blank_lines(c[0], texts, 1, 0),
-                                        self._consume_blank_lines(c[1], texts, 1, 2))
-            self._merge_cache = [x for x in self._merge_cache if x != (None, None)]
+                self._merge_cache[i] = (consume_blank_lines(c[0], texts, 1, 0),
+                                        consume_blank_lines(c[1], texts, 1, 2))
+            self._merge_cache = [x for x in self._merge_cache if any(x)]
+
+        # Calculate chunks that were added (in the new but not the old merge
+        # cache), removed (in the old but not the new merge cache) and changed
+        # (where the edit actually occurred, *and* the chunk is still around).
+        # This information is used by the inline highlighting mechanism to
+        # avoid re-highlighting existing chunks.
+        removed_chunks = self._old_merge_cache - set(self._merge_cache)
+        modified_chunks = self._changed_chunks
+        if modified_chunks in removed_chunks:
+            modified_chunks = tuple()
 
         mergeable0, mergeable1 = False, False
         for (c0, c1) in self._merge_cache:
@@ -99,7 +117,7 @@ class Differ(object):
             mergeable1 = mergeable1 or (c1 is not None and c1[0] != 'conflict')
             if mergeable0 and mergeable1:
                 break
-        self._has_mergeable_changes = (mergeable0, mergeable1)
+        self._has_mergeable_changes = (False, mergeable0, mergeable1, False)
 
         # Conflicts can only occur when there are three panes, and will always
         # involve the middle pane.
@@ -112,6 +130,12 @@ class Differ(object):
         self._update_line_cache()
 
     def _update_line_cache(self):
+        """Cache a mapping from line index to per-pane chunk indices
+
+        This cache exists so that the UI can quickly query for current,
+        next and previous chunks when the current cursor line changes,
+        enabling better action sensitivity feedback.
+        """
         for i, l in enumerate(self.seqlength):
             # seqlength + 1 for after-last-line requests, which we do
             self._line_cache[i] = [(None, None, None)] * (l + 1)
@@ -144,45 +168,23 @@ class Differ(object):
 
                 start, end, last = c[diff][lo], c[diff][hi], old_end[seq]
                 if (start > last):
-                    self._line_cache[seq][last:start] = [(None, prev[seq], next[seq])] * (start - last)
+                    chunk_ids = [(None, prev[seq], next[seq])] * (start - last)
+                    self._line_cache[seq][last:start] = chunk_ids
 
                 # For insert chunks, claim the subsequent line.
                 if start == end:
                     end += 1
 
                 next[seq] = find_next(diff, seq, i)
-                self._line_cache[seq][start:end] = [(i, prev[seq], next[seq])] * (end - start)
+                chunk_ids = [(i, prev[seq], next[seq])] * (end - start)
+                self._line_cache[seq][start:end] = chunk_ids
                 prev[seq], old_end[seq] = i, end
 
         for seq in range(3):
             last, end = old_end[seq], len(self._line_cache[seq])
             if (last < end):
-                self._line_cache[seq][last:end] = [(None, prev[seq], next[seq])] * (end - last)
-
-    def _consume_blank_lines(self, c, texts, pane1, pane2):
-        if c is None:
-            return None
-        c0 = c[0]
-        c1, c2 = self._find_blank_lines(texts[pane1], c[1], c[2])
-        c3, c4 = self._find_blank_lines(texts[pane2], c[3], c[4])
-        if c1 == c2 and c3 == c4:
-            return None
-        if c1 == c2 and c[0] == "replace":
-            c0 = "insert"
-        elif c3 == c4 and c[0] == "replace":
-            c0 = "delete"
-        return (c0, c1, c2, c3, c4)
-
-    def _find_blank_lines(self, txt, lo, hi):
-        for line in range(lo, hi):
-            if txt[line]:
-                break
-            lo += 1
-        for line in range(hi, lo, -1):
-            if txt[line - 1]:
-                break
-            hi -= 1
-        return lo, hi
+                chunk_ids = [(None, prev[seq], next[seq])] * (end - last)
+                self._line_cache[seq][last:end] = chunk_ids
 
     def change_sequence(self, sequence, startidx, sizechange, texts):
         assert sequence in (0, 1, 2)
@@ -191,6 +193,44 @@ class Differ(object):
         if sequence == 2 or (sequence == 1 and self.num_sequences == 3):
             self._change_sequence(1, sequence, startidx, sizechange, texts)
         self.seqlength[sequence] += sizechange
+
+        def offset(c, start, o1, o2):
+            """Offset a chunk by o1/o2 if it's after the inserted lines"""
+            if c is None:
+                return None
+            start_a = c.start_a + (o1 if c.start_a > start else 0)
+            end_a = c.end_a + (o1 if c.end_a > start else 0)
+            start_b = c.start_b + (o2 if c.start_b > start else 0)
+            end_b = c.end_b + (o2 if c.end_b > start else 0)
+            return DiffChunk._make((c.tag, start_a, end_a, start_b, end_b))
+
+        # Calculate the expected differences in the chunk set if no cascading
+        # changes occur, making sure to not include the changed chunk itself
+        self._old_merge_cache = set()
+        self._changed_chunks = tuple()
+        chunk_changed = False
+        for (c1, c2) in self._merge_cache:
+            if sequence == 0:
+                if c1 and c1.start_b <= startidx < c1.end_b:
+                    chunk_changed = True
+                c1 = offset(c1, startidx, 0, sizechange)
+            elif sequence == 2:
+                if c2 and c2.start_b <= startidx < c2.end_b:
+                    chunk_changed = True
+                c2 = offset(c2, startidx, 0, sizechange)
+            else:
+                # Middle sequence changes alter both chunks
+                if c1 and c1.start_a <= startidx < c1.end_a:
+                    chunk_changed = True
+                c1 = offset(c1, startidx, sizechange, 0)
+                if self.num_sequences == 3:
+                    c2 = offset(c2, startidx, sizechange, 0)
+            if chunk_changed:
+                assert not self._changed_chunks
+                self._changed_chunks = (c1, c2)
+                chunk_changed = False
+            self._old_merge_cache.add((c1, c2))
+
         self._update_merge_cache(texts)
 
     def _locate_chunk(self, whichdiffs, sequence, line):
@@ -201,8 +241,16 @@ class Differ(object):
                 return i
         return len(self.diffs[whichdiffs])
 
+    def has_chunk(self, to_pane, chunk):
+        """Return whether the pane/chunk exists in the current Differ"""
+        sequence = 1 if to_pane == 2 else 0
+        chunk_index, _, _ = self.locate_chunk(1, chunk.start_a)
+        if chunk_index is None:
+            return False
+        return self._merge_cache[chunk_index][sequence] == chunk
+
     def get_chunk(self, index, from_pane, to_pane=None):
-        """Return the index-th change in from_pane.
+        """Return the index-th change in from_pane
 
         If to_pane is provided, then only changes between from_pane and to_pane
         are considered, otherwise all changes starting at from_pane are used.
@@ -218,8 +266,25 @@ class Differ(object):
                 chunk = self._merge_cache[index][1]
             return chunk
 
+    def get_chunk_starts(self, index):
+        """Return the starting lines of all chunks at an index"""
+        chunks = self._merge_cache[index]
+        chunk_starts = [
+            chunks[0].start_b if chunks[0] else None,
+            chunks[0].start_a if chunks[0] else None,
+            chunks[1].start_b if chunks[1] else None,
+        ]
+        return chunk_starts
+
     def locate_chunk(self, pane, line):
-        """Find the index of the chunk which contains line."""
+        """Find the index of the chunk which contains line
+
+        Returns a tuple containing the current, previous and next chunk
+        indices in that order. If the line has no associated chunk,
+        None will be returned as the first element. If there are no
+        previous/next chunks then None will be returned as the
+        second/third elements.
+        """
         try:
             return self._line_cache[pane][line]
         except IndexError:
@@ -229,15 +294,7 @@ class Differ(object):
         return len(self._merge_cache)
 
     def has_mergeable_changes(self, which):
-        if which == 0:
-            return (False, self._has_mergeable_changes[0])
-        elif which == 1:
-            if self.num_sequences == 2:
-                return (self._has_mergeable_changes[0], False)
-            else:
-                return self._has_mergeable_changes
-        else:  # which == 2
-            return (self._has_mergeable_changes[1], False)
+        return self._has_mergeable_changes[which:which + 2]
 
     def _change_sequence(self, which, sequence, startidx, sizechange, texts):
         diffs = self.diffs[which]
@@ -245,7 +302,7 @@ class Differ(object):
         lines_added[sequence] = sizechange
         loidx = self._locate_chunk(which, sequence, startidx)
         if sizechange < 0:
-            hiidx = self._locate_chunk(which, sequence, startidx-sizechange)
+            hiidx = self._locate_chunk(which, sequence, startidx - sizechange)
         else:
             hiidx = loidx
         if loidx > 0:
@@ -253,10 +310,10 @@ class Differ(object):
             lorange = diffs[loidx][3], diffs[loidx][1]
         else:
             lorange = (0, 0)
-        x = which*2
+        x = which * 2
         if hiidx < len(diffs):
             hiidx += 1
-            hirange = diffs[hiidx-1][4], diffs[hiidx-1][2]
+            hirange = diffs[hiidx - 1][4], diffs[hiidx - 1][2]
         else:
             hirange = self.seqlength[x], self.seqlength[1]
         rangex = lorange[0], hirange[0] + lines_added[x]
@@ -264,13 +321,18 @@ class Differ(object):
         assert rangex[0] <= rangex[1] and range1[0] <= range1[1]
         linesx = texts[x][rangex[0]:rangex[1]]
         lines1 = texts[1][range1[0]:range1[1]]
+
+        def offset(c, o1, o2):
+            return DiffChunk._make((c[0], c[1] + o1, c[2] + o1,
+                                    c[3] + o2, c[4] + o2))
+
         newdiffs = self._matcher(None, lines1, linesx).get_difference_opcodes()
-        newdiffs = [(c[0], c[1]+range1[0], c[2]+range1[0], c[3]+rangex[0], c[4]+rangex[0]) for c in newdiffs]
+        newdiffs = [offset(c, range1[0], rangex[0]) for c in newdiffs]
+
         if hiidx < len(self.diffs[which]):
-            self.diffs[which][hiidx:] = [(c[0],
-                                          c[1] + lines_added[1], c[2] + lines_added[1],
-                                          c[3] + lines_added[x], c[4] + lines_added[x])
-                                         for c in self.diffs[which][hiidx:]]
+            offset_diffs = [offset(c, lines_added[1], lines_added[x])
+                            for c in self.diffs[which][hiidx:]]
+            self.diffs[which][hiidx:] = offset_diffs
         self.diffs[which][loidx:hiidx] = newdiffs
 
     def _range_from_lines(self, textindex, lines):
@@ -304,12 +366,12 @@ class Differ(object):
             merge_cache = self._merge_cache
 
         if fromindex == 1:
-            seq = toindex/2
+            seq = toindex // 2
             for c in merge_cache:
                 if c[seq]:
                     yield c[seq]
         else:
-            seq = fromindex/2
+            seq = fromindex // 2
             for c in merge_cache:
                 if c[seq]:
                     yield reverse_chunk(c[seq])
@@ -325,7 +387,7 @@ class Differ(object):
         else:
             merge_cache = self._merge_cache
         if textindex in (0, 2):
-            seq = textindex/2
+            seq = textindex // 2
             for cs in merge_cache:
                 if cs[seq]:
                     yield reverse_chunk(cs[seq])
@@ -345,15 +407,15 @@ class Differ(object):
         high = []
         for i in (0, 1):
             d = using[i][0]
-            low.append(lowc - d[LO] + d[2+LO])
+            low.append(lowc - d[LO] + d[2 + LO])
             d = using[i][-1]
-            high.append(highc - d[HI] + d[2+HI])
+            high.append(highc - d[HI] + d[2 + HI])
         return low[0], high[0], lowc, highc, low[1], high[1]
 
     def _auto_merge(self, using, texts):
         """Automatically merge two sequences of change blocks"""
         l0, h0, l1, h1, l2, h2 = self._merge_blocks(using)
-        if h0-l0 == h2-l2 and texts[0][l0:h0] == texts[2][l2:h2]:
+        if h0 - l0 == h2 - l2 and texts[0][l0:h0] == texts[2][l2:h2]:
             if l1 != h1 and l0 == h0:
                 tag = "delete"
             elif l1 != h1:
@@ -384,47 +446,47 @@ class Differ(object):
             return
         else:
             tag = "conflict"
-        out0 = (tag, l1, h1, l0, h0)
-        out1 = (tag, l1, h1, l2, h2)
+        out0 = DiffChunk._make((tag, l1, h1, l0, h0))
+        out1 = DiffChunk._make((tag, l1, h1, l2, h2))
         yield out0, out1
 
     def _merge_diffs(self, seq0, seq1, texts):
         seq0, seq1 = seq0[:], seq1[:]
         seq = seq0, seq1
-        LO, HI = 1, 2
         while len(seq0) or len(seq1):
-            if len(seq0) == 0:
+            if not seq0:
                 high_seq = 1
-            elif len(seq1) == 0:
+            elif not seq1:
                 high_seq = 0
             else:
-                high_seq = int(seq0[0][LO] > seq1[0][LO])
-                if seq0[0][LO] == seq1[0][LO]:
-                    if seq0[0][0] == "insert":
+                high_seq = int(seq0[0].start_a > seq1[0].start_a)
+                if seq0[0].start_a == seq1[0].start_a:
+                    if seq0[0].tag == "insert":
                         high_seq = 0
-                    elif seq1[0][0] == "insert":
+                    elif seq1[0].tag == "insert":
                         high_seq = 1
 
             high_diff = seq[high_seq].pop(0)
-            high_mark = high_diff[HI]
-            other_seq = high_seq ^ 1
+            high_mark = high_diff.end_a
+            other_seq = 0 if high_seq == 1 else 1
 
             using = [[], []]
             using[high_seq].append(high_diff)
 
             while seq[other_seq]:
                 other_diff = seq[other_seq][0]
-                if high_mark < other_diff[LO]:
+                if high_mark < other_diff.start_a:
                     break
-                if high_mark == other_diff[LO] and not (high_diff[0] == other_diff[0] == "insert"):
+                if high_mark == other_diff.start_a and \
+                   not (high_diff.tag == other_diff.tag == "insert"):
                     break
 
                 using[other_seq].append(other_diff)
                 seq[other_seq].pop(0)
 
-                if high_mark < other_diff[HI]:
-                    (high_seq, other_seq) = (other_seq, high_seq)
-                    high_mark = other_diff[HI]
+                if high_mark < other_diff.end_a:
+                    high_seq, other_seq = other_seq, high_seq
+                    high_mark = other_diff.end_a
 
             if len(using[0]) == 0:
                 assert len(using[1]) == 1
@@ -443,7 +505,13 @@ class Differ(object):
         self.seqlength = [len(s) for s in sequences]
 
         for i in range(self.num_sequences - 1):
-            matcher = self._matcher(None, sequences[1], sequences[i * 2])
+            if self.syncpoints:
+                syncpoints = [(s[i][0](), s[i][1]()) for s in self.syncpoints]
+                matcher = self._sync_matcher(None,
+                                             sequences[1], sequences[i * 2],
+                                             syncpoints=syncpoints)
+            else:
+                matcher = self._matcher(None, sequences[1], sequences[i * 2])
             work = matcher.initialise()
             while next(work) is None:
                 yield None
@@ -455,6 +523,6 @@ class Differ(object):
     def clear(self):
         self.diffs = [[], []]
         self.seqlength = [0] * self.num_sequences
-        texts = [""] * self.num_sequences
         self._initialised = False
-        self._update_merge_cache(texts)
+        self._old_merge_cache = set()
+        self._update_merge_cache([""] * self.num_sequences)

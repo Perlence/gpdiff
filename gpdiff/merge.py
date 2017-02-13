@@ -1,26 +1,25 @@
-# Copyright (C) 2009 Piotr Piastucki <the_leech@users.berlios.de>
-
-# This program is free software; you can redistribute it and/or modify
+# Copyright (C) 2009-2010 Piotr Piastucki <the_leech@users.berlios.de>
+#
+# This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
+# the Free Software Foundation, either version 2 of the License, or (at
+# your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from . import diffutil
-from . import matchers
+from .myers import MyersSequenceMatcher
 
 
 class AutoMergeDiffer(diffutil.Differ):
 
-    _matcher = matchers.MyersSequenceMatcher
+    _matcher = MyersSequenceMatcher
 
     def __init__(self):
         diffutil.Differ.__init__(self)
@@ -149,7 +148,7 @@ class Merger(diffutil.Differ):
 
     def initialize(self, sequences, texts):
         step = self.differ.set_sequences_iter(sequences)
-        while step.next() is None:
+        while next(step) is None:
             yield None
         self.texts = texts
         yield 1
@@ -230,4 +229,4 @@ class Merger(diffutil.Differ):
         for i in range(lastline, baselen):
             mergedtext.append(self.texts[toindex][i])
 
-        yield "\n".join(mergedtext)
+        yield mergedtext
