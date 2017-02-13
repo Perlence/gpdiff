@@ -36,7 +36,7 @@ class Merger(diffutil.Differ):
         else:
             return change[HI] - change[LO]
 
-    def merge_3_files(self, mark_conflicts=True):
+    def merge_3_files(self):
         LO, HI = 1, 2
         self.unresolved = []
         lastline = 0
@@ -54,20 +54,7 @@ class Merger(diffutil.Differ):
                 mergedtext.append(self.texts[1][i])
             mergedline += low_mark - lastline
             lastline = low_mark
-            if change[0] is not None and change[1] is not None and change[0][0] == 'conflict':
-                high_mark = max(change[0][HI], change[1][HI])
-                if mark_conflicts:
-                    if low_mark < high_mark:
-                        for i in range(low_mark, high_mark):
-                            mergedtext.append("(??)" + self.texts[1][i])
-                            self.unresolved.append(mergedline)
-                            mergedline += 1
-                    else:
-                        mergedtext.append("(??)")
-                        self.unresolved.append(mergedline)
-                        mergedline += 1
-                    lastline = high_mark
-            elif change[0] is not None:
+            if change[0] is not None:
                 lastline += self._apply_change(self.texts[0], change[0], mergedtext)
                 mergedline += change[0][HI + 2] - change[0][LO + 2]
             else:

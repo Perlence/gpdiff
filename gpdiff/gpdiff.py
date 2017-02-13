@@ -90,7 +90,7 @@ class GPDiffer(diffutil.Differ):
         merger = merge.Merger()
         merger.differ = self
         merger.texts = self._sequences
-        for result in merger.merge_3_files(mark_conflicts=False):
+        for result in merger.merge_3_files():
             pass
         return result
 
