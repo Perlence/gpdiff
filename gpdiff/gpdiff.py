@@ -121,14 +121,16 @@ class GPDiffer(diffutil.Differ):
             else:
                 str_value = str(value)
             if number > 0:
-                yield "{prefix} Track {number}: {attr} = {value}".format(prefix=prefix[action],
-                                                                         number=number + self.tracknumber[pane],
-                                                                         attr=attr,
-                                                                         value=str_value)
+                yield ("{prefix} Track {number}: {attr} = {value}"
+                       .format(prefix=prefix[action],
+                               number=number + self.tracknumber[pane],
+                               attr=attr,
+                               value=str_value))
             else:
-                yield "{prefix} Song: {attr} = {value}".format(prefix=prefix[action],
-                                                               attr=attr,
-                                                               value=str_value)
+                yield ("{prefix} Song: {attr} = {value}"
+                       .format(prefix=prefix[action],
+                               attr=attr,
+                               value=str_value))
 
     def infodiff(self, change, pane, replace_prefix='!'):
         a, b = self._sequences[1], self._sequences[pane * 2]
