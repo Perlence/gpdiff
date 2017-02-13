@@ -72,17 +72,14 @@ class GPDiffer(diffutil.Differ):
         self.files = self.files[:]
         self.songs = self.songs[:]
         self._sequences = list(map(flatten.flatten, self.songs))
-        for _ in self.set_sequences_iter(self._sequences):
-            pass
+        self.set_sequences_iter(self._sequences)
 
     def _merge_sequences(self):
         """Merge sequences using diff data of differ."""
         merger = merge.Merger()
         merger.differ = self
         merger.texts = self._sequences
-        for result in merger.merge_3_files():
-            pass
-        return result
+        return merger.merge_3_files()
 
     def merge(self):
         """Merge sequences and restore tab."""

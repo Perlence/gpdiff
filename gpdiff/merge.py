@@ -43,7 +43,6 @@ class Merger(diffutil.Differ):
         mergedline = 0
         mergedtext = []
         for change in self.differ.all_changes():
-            yield None
             low_mark = lastline
             if change[0] is not None:
                 low_mark = change[0][LO]
@@ -64,4 +63,4 @@ class Merger(diffutil.Differ):
         for i in range(lastline, baselen, 1):
             mergedtext.append(self.texts[1][i])
 
-        yield mergedtext
+        return mergedtext

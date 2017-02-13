@@ -249,10 +249,7 @@ class Differ(object):
 
         for i in range(self.num_sequences - 1):
             matcher = self._matcher(None, sequences[1], sequences[i * 2])
-            work = matcher.initialise()
-            while next(work) is None:
-                yield None
+            matcher.initialise()
             self.diffs[i] = matcher.get_difference_opcodes()
         self._initialised = True
         self._update_merge_cache(sequences)
-        yield 1

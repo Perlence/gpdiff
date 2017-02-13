@@ -79,8 +79,7 @@ class MyersSequenceMatcher(difflib.SequenceMatcher):
 
     def get_matching_blocks(self):
         if self.matching_blocks is None:
-            for i in self.initialise():
-                pass
+            self.initialise()
         return self.matching_blocks
 
     def get_opcodes(self):
@@ -244,8 +243,6 @@ class MyersSequenceMatcher(difflib.SequenceMatcher):
             p = -1
             while True:
                 p += 1
-                if not p % 100:
-                    yield None
                 # move along vertical edge
                 yv = -1
                 node = None
@@ -307,4 +304,3 @@ class MyersSequenceMatcher(difflib.SequenceMatcher):
                     break
         self.build_matching_blocks(lastsnake)
         self.postprocess()
-        yield 1
