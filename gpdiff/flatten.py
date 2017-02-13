@@ -6,7 +6,7 @@ import guitarpro as gp
 
 
 def flatten(song):
-    """Convert Song into list."""
+    """Convert Song into a tuple."""
     result = []
     result.extend(flat_obj(song, expand=['pageSetup'], skip=['tracks']))
     for track in song.tracks:
@@ -17,7 +17,7 @@ def flatten(song):
 
 
 def restore(sequence):
-    """Restore Song from list."""
+    """Restore Song from flat sequence."""
     song = None
     stack = []
     track_number = measure_number = 1
