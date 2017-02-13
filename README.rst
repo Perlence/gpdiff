@@ -25,5 +25,5 @@ Please, check the enclosed CLI help message:
 Acknowledgements
 ----------------
 
-Modules ``gpdiff.matchers``, ``gpdiff.diffutil``, and ``gpdiff.merge`` are taken almost without modifications from `Meld
+Modules ``gpdiff.myers``, ``gpdiff.diffutil``, and ``gpdiff.merge`` are taken almost without modifications from `Meld
 <https://github.com/GNOME/meld>`_.
