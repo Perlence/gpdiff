@@ -46,7 +46,7 @@ class IncrementalSequenceMatcher(difflib.SequenceMatcher):
         yield 1
 
     def get_difference_opcodes(self):
-        return filter(lambda x: x[0] != "equal", self.get_opcodes())
+        return [x for x in self.get_opcodes() if x[0] != "equal"]
 
 
 opcode_reverse = {

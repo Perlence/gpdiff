@@ -72,7 +72,7 @@ class MyersSequenceMatcher(difflib.SequenceMatcher):
         return self.matching_blocks
 
     def get_difference_opcodes(self):
-        return filter(lambda x: x[0] != "equal", self.get_opcodes())
+        return [x for x in self.get_opcodes() if x[0] != "equal"]
 
     def preprocess(self):
         """
