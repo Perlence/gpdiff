@@ -66,8 +66,8 @@ class Differ(object):
 
         mergeable0, mergeable1 = False, False
         for (c0, c1) in self._merge_cache:
-            mergeable0 = mergeable0 or (c0 is not None and c0[0] != 'conflict')
-            mergeable1 = mergeable1 or (c1 is not None and c1[0] != 'conflict')
+            mergeable0 = mergeable0 or (c0 is not None and c0.tag != 'conflict')
+            mergeable1 = mergeable1 or (c1 is not None and c1.tag != 'conflict')
             if mergeable0 and mergeable1:
                 break
         self._has_mergeable_changes = (False, mergeable0, mergeable1, False)
@@ -76,8 +76,8 @@ class Differ(object):
         # involve the middle pane.
         self.conflicts = []
         for i, (c1, c2) in enumerate(self._merge_cache):
-            if (c1 is not None and c1[0] == 'conflict') or \
-               (c2 is not None and c2[0] == 'conflict'):
+            if (c1 is not None and c1.tag == 'conflict') or \
+               (c2 is not None and c2.tag == 'conflict'):
                 self.conflicts.append(i)
 
         self._update_line_cache()
