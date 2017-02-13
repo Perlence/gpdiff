@@ -11,30 +11,12 @@ from . import merge
 
 
 def main():
-    legend = ('Measure diff legend:\n'
-              '  +  inserted measure\n'
-              '  -  removed measure\n'
-              '  !  changed measure in 2-file mode\n'
-              '  >  changed measure of first descendant\n'
-              '  <  changed measure of second descendant\n'
-              '  x  conflict')
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='Diff and merge Guitar Pro 3-5 files\n\n' + legend,
-        epilog='Returns 0 if diff or merge completed without conflicts\n'
-               'Returns 1 if conflicts occurred\n'
-               'Returns 2 if error occurred')
-    parser.add_argument('OLDFILE')
-    parser.add_argument('MYFILE')
-    parser.add_argument('YOURFILE', nargs='?')
-    parser.add_argument('-o', dest='output', metavar='OUTPUT', help='path to output merged file')
-    parser.add_argument('-f', dest='format', choices=['gp3', 'gp4', 'gp5'], help='output file format')
-    args = parser.parse_args()
-    sys.exit(cli(args))
+    sys.exit(cli(sys.argv[1:]))
 
 
-def cli(args):
+def cli(argv):
     """Command line interface."""
+    args = parser.parse_args(argv)
     files = [args.OLDFILE, args.MYFILE, args.YOURFILE]
     # Parse files
     songs = [guitarpro.parse(f) for f in files if f is not None]
@@ -43,7 +25,8 @@ def cli(args):
         # If output is specified, try to merge
         if args.output is not None:
             result = differ.merge()
-            guitarpro.write(result, args.output, format=args.format)
+            max_version = max(song.versionTuple for song in songs)
+            guitarpro.write(result, args.output, version=max_version)
             if not len(differ.conflicts):
                 return 0
     for line in differ.show():
@@ -52,6 +35,25 @@ def cli(args):
         return 0
     else:
         return 1
+
+
+legend = ('Measure diff legend:\n'
+          '  +  inserted measure\n'
+          '  -  removed measure\n'
+          '  !  changed measure in 2-file mode\n'
+          '  >  changed measure of first descendant\n'
+          '  <  changed measure of second descendant\n'
+          '  x  conflict')
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    description='Diff and merge Guitar Pro 3-5 files\n\n' + legend,
+    epilog='Returns 0 if diff or merge completed without conflicts\n'
+           'Returns 1 if conflicts occurred\n'
+           'Returns 2 if error occurred')
+parser.add_argument('OLDFILE')
+parser.add_argument('MYFILE')
+parser.add_argument('YOURFILE', nargs='?')
+parser.add_argument('-o', dest='output', metavar='OUTPUT', help='path to output merged file')
 
 
 class GPDiffer(diffutil.Differ):
