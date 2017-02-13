@@ -3,6 +3,7 @@ import os
 import sys
 import time
 
+import attr
 import guitarpro
 
 from . import flatten
@@ -17,7 +18,7 @@ def main():
 def cli(argv):
     """Command line interface."""
     args = parser.parse_args(argv)
-    files = [args.OLDFILE, args.MYFILE, args.YOURFILE]
+    files = [args.MYFILE, args.OLDFILE, args.YOURFILE]
     # Parse files
     songs = [guitarpro.parse(f) for f in files if f is not None]
     differ = GPDiffer(files, songs)
@@ -56,37 +57,26 @@ parser.add_argument('YOURFILE', nargs='?')
 parser.add_argument('-o', dest='output', metavar='OUTPUT', help='path to output merged file')
 
 
+@attr.s
 class GPDiffer(diffutil.Differ):
-    def __init__(self, files=[], songs=[], *args, **kwds):
-        '''Initialize Differ instance with given songs
+    """A Differ instance with given songs.
 
-        :param files: list of 2 or 3 file names: [O, A, B] or [O, A].
-        :param songs: list of 2 or 3 parsed tabs.
+    :param files: list of 2 or 3 file names: [A, O, B] or [A, O].
+    :param songs: list of 2 or 3 parsed tabs.
+    """
+    files = attr.ib(default=attr.Factory(list))
+    songs = attr.ib(default=attr.Factory(list))
 
-        Internally these lists transform into [A, O, B] and [A, O] respectively.
-        '''
-        diffutil.Differ.__init__(self, *args, **kwds)
-        self.files = files[:]
-        self.files[0], self.files[1] = files[1], files[0]
-        self.songs = songs
-
-    def _get_songs(self):
-        songs = self._songs[:]
-        songs[0], songs[1] = self._songs[1], self._songs[0]
-        return songs
-
-    def _set_songs(self, songs):
-        self._songs = songs[:]
-        self._songs[0], self._songs[1] = songs[1], songs[0]
-        self._sequences = list(map(flatten.flatten, self._songs))
+    def __attrs_post_init__(self):
+        super().__init__()
+        self.files = self.files[:]
+        self.songs = self.songs[:]
+        self._sequences = list(map(flatten.flatten, self.songs))
         for _ in self.set_sequences_iter(self._sequences):
             pass
 
-    songs = property(_get_songs, _set_songs)
-
     def _merge_sequences(self):
-        '''Merge sequences using diff data of differ
-        '''
+        """Merge sequences using diff data of differ."""
         merger = merge.Merger()
         merger.differ = self
         merger.texts = self._sequences
@@ -95,8 +85,7 @@ class GPDiffer(diffutil.Differ):
         return result
 
     def merge(self):
-        '''Merge sequences and restore tab
-        '''
+        """Merge sequences and restore tab."""
         assert len(self.songs) == 3
         merged_sequence = self._merge_sequences()
         return flatten.restore(merged_sequence)
@@ -205,8 +194,8 @@ class GPDiffer(diffutil.Differ):
                     self.store_change(a, pane, x, 'conflict')
 
     def show(self):
-        '''Output somewhat human-readable representation of diff between sequences
-        '''
+        """Output somewhat human-readable representation of diff between
+        sequences."""
         self.measures = []
         self.tracknumber = [0, 0]
         for i in range(max(len(song.tracks) for song in self.songs)):
@@ -215,7 +204,7 @@ class GPDiffer(diffutil.Differ):
                 track.append(' ')
             self.measures.append(track)
 
-        if len(self._songs) == 3:
+        if len(self.songs) == 3:
             replace_prefix = '><'
         else:
             replace_prefix = '!!'

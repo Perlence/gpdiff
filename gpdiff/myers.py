@@ -16,6 +16,8 @@
 import collections
 import difflib
 
+import attr
+
 
 def find_common_prefix(a, b):
     if not a or not b:
@@ -57,16 +59,18 @@ DiffChunk = collections.namedtuple('DiffChunk',
                                    'tag, start_a, end_a, start_b, end_b')
 
 
+@attr.s
 class MyersSequenceMatcher(difflib.SequenceMatcher):
 
-    def __init__(self, isjunk=None, a="", b=""):
-        if isjunk is not None:
+    isjunk = attr.ib(default=None)
+    a = attr.ib(default="")
+    b = attr.ib(default="")
+
+    def __attrs_post_init__(self):
+        if self.isjunk is not None:
             raise NotImplementedError('isjunk is not supported yet')
-        # The sequences we're comparing must be considered immutable;
-        # calling e.g., GtkTextBuffer methods to retrieve these line-by-line
-        # isn't really a thing we can or should do.
-        self.a = a[:]
-        self.b = b[:]
+        self.a = self.a[:]
+        self.b = self.b[:]
         self.matching_blocks = self.opcodes = None
         self.aindex = []
         self.bindex = []
