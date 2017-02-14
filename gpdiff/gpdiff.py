@@ -71,8 +71,18 @@ class GPDiffer(diffutil.Differ):
         super().__init__()
         self.files = self.files[:]
         self.songs = self.songs[:]
-        self._sequences = list(map(flatten.flatten, self.songs))
-        self.set_sequences_iter(self._sequences)
+        self.flat_songs = list(map(flatten.flatten, self.songs))
+
+        if len(self.songs) == 3:
+            self.replace_prefixes = '><'
+        else:
+            self.replace_prefixes = '!!'
+
+    def merge(self):
+        """Merge sequences and restore tab."""
+        assert len(self.songs) == 3
+        merged_sequence = self._merge_sequences()
+        return flatten.restore(merged_sequence)
 
     def _merge_sequences(self):
         """Merge sequences using diff data of differ."""
@@ -81,58 +91,40 @@ class GPDiffer(diffutil.Differ):
         merger.texts = self._sequences
         return merger.merge_3_files()
 
-    def merge(self):
-        """Merge sequences and restore tab."""
-        assert len(self.songs) == 3
-        merged_sequence = self._merge_sequences()
-        return flatten.restore(merged_sequence)
+    def show(self):
+        """Output somewhat human-readable representation of diff between
+        sequences."""
+        yield from self.show_file_info()
+        yield from self.show_attr_diff('Song information', [fs.song_attrs for fs in self.flat_songs])
+        yield from self.show_measure_diff()
 
-    def get_tracknumber(self, sequence):
-        tracks = [x for x in sequence if x is guitarpro.Track]
-        return len(tracks)
+    def show_file_info(self):
+        yield 'OLDFILE:  %s\t%s' % (self.files[1], getmtime(self.files[1]))
+        yield 'MYFILE:   %s\t%s' % (self.files[0], getmtime(self.files[0]))
+        if len(self.songs) > 2:
+            yield 'YOURFILE: %s\t%s' % (self.files[2], getmtime(self.files[2]))
 
-    def store_change(self, sequence, pane, index, action, replace_prefix='!'):
-        prefix = dict(insert='+', delete='-', replace=replace_prefix, conflict='x', equal=' ')
-        obj = sequence[index]
-        if isinstance(obj, guitarpro.Measure):
-            measure = obj
-            track_number = measure.track.number + self.tracknumber[pane] - 1
-            self.measures[track_number][measure.number - 1] = prefix[action]
-        elif obj is guitarpro.Track:
-            if action == 'insert':
-                self.tracknumber[1 - pane] += 1
+    def show_attr_diff(self, section_name, attrs):
+        self._sequences = attrs
+        self.set_sequences_iter(self._sequences)
+        all_changes = list(self.all_changes())
+        if not all_changes:
+            return
 
-    def print_info(self, sequence, pane, index, action, replace_prefix='!'):
-        prefix = dict(insert='+', delete='-', replace=replace_prefix, conflict='x', equal=' ')
-        obj = sequence[index]
-        if isinstance(obj, tuple):
-            attr, value = obj
-            number = self.get_tracknumber(sequence[:index])
-            if isinstance(value, tuple):
-                if attr == 'strings':
-                    value = reversed(value)
-                    str_value = '({})'.format(', '.join(map(str, value)))
-                else:
-                    str_value = str(value)
-            elif isinstance(value, str):
-                str_value = repr(value)
-            elif isinstance(value, guitarpro.Lyrics):
-                str_value = repr(str(value))
-            else:
-                str_value = str(value)
-            if number > 0:
-                yield ("{prefix} Track {number}: {attr} = {value}"
-                       .format(prefix=prefix[action],
-                               number=number + self.tracknumber[pane],
-                               attr=attr,
-                               value=str_value))
-            else:
-                yield ("{prefix} Song: {attr} = {value}"
-                       .format(prefix=prefix[action],
-                               attr=attr,
-                               value=str_value))
+        yield ''
+        yield section_name
+        yield '=' * len(section_name)
+        yield ''
 
-    def infodiff(self, change, pane, replace_prefix='!'):
+        for change in all_changes:
+            if change[0] is not None:
+                for line in self.infodiff(change, 0, self.replace_prefixes[0]):
+                    yield line
+            if change[1] is not None:
+                for line in self.infodiff(change, 1, self.replace_prefixes[1]):
+                    yield line
+
+    def infodiff(self, change, pane, replace_prefix):
         a, b = self._sequences[1], self._sequences[pane * 2]
         tag, i1, i2, j1, j2 = change[pane]
         if tag == 'replace':
@@ -160,6 +152,78 @@ class GPDiffer(diffutil.Differ):
                 for x in range(i1, i2):
                     for line in self.print_info(a, pane, x, 'conflict'):
                         yield line
+
+    def print_info(self, sequence, pane, index, action, replace_prefix='!'):
+        prefix = {'insert': '+', 'delete': '-', 'replace': replace_prefix, 'conflict': 'x', 'equal': ' '}
+        obj = sequence[index]
+        if isinstance(obj, tuple):
+            attr_name, value = obj
+            number = self.get_tracknumber(sequence[:index])
+            if isinstance(value, tuple):
+                if attr_name == 'strings':
+                    value = reversed(value)
+                    str_value = '({})'.format(', '.join(map(str, value)))
+                else:
+                    str_value = str(value)
+            elif isinstance(value, str):
+                str_value = repr(value)
+            elif isinstance(value, guitarpro.Lyrics):
+                str_value = repr(str(value))
+            else:
+                str_value = str(value)
+            if number > 0:
+                yield ("{prefix} Track {number}: {attr_name} = {value}"
+                       .format(prefix=prefix[action],
+                               number=number + self.tracknumber[pane],
+                               attr_name=attr_name,
+                               value=str_value))
+            else:
+                yield ("{prefix} Song: {attr_name} = {value}"
+                       .format(prefix=prefix[action],
+                               attr_name=attr_name,
+                               value=str_value))
+
+    def get_tracknumber(self, sequence):
+        tracks = [x for x in sequence if x is guitarpro.Track]
+        return len(tracks)
+
+    def show_measure_diff(self):
+        self._sequences = [fs.measures for fs in self.flat_songs]
+        self.set_sequences_iter(self._sequences)
+        all_changes = list(self.all_changes())
+        if not all_changes:
+            return
+
+        yield ''
+        yield 'Measures'
+        yield '========'
+        yield ''
+
+        self.measures = []
+        self.tracknumber = [0, 0]
+        for i in range(max(len(song.tracks) for song in self.songs)):
+            track = []
+            for j in range(max(len(song.tracks[0].measures) for song in self.songs)):
+                track.append(' ')
+            self.measures.append(track)
+
+        for change in all_changes:
+            if change[0] is not None:
+                self.measurediff(change, 0, self.replace_prefixes[0])
+            if change[1] is not None:
+                self.measurediff(change, 1, self.replace_prefixes[1])
+
+        block = False
+
+        yield ' ' + ' '.join([str(i) for i, _ in enumerate(self.measures, start=1)])
+        for number, tracks in enumerate(zip(*self.measures)):
+            if any(x != ' ' for x in tracks):
+                yield '[{}] {}'.format('|'.join(map(str, tracks)), number + 1)
+                block = True
+            else:
+                if block:
+                    yield ''
+                block = False
 
     def measurediff(self, change, pane, replace_prefix='!'):
         a, b = self._sequences[1], self._sequences[pane * 2]
@@ -192,66 +256,20 @@ class GPDiffer(diffutil.Differ):
                 for x in range(i1, i2):
                     self.store_change(a, pane, x, 'conflict')
 
-    def show(self):
-        """Output somewhat human-readable representation of diff between
-        sequences."""
-        self.measures = []
-        self.tracknumber = [0, 0]
-        for i in range(max(len(song.tracks) for song in self.songs)):
-            track = []
-            for j in range(max(len(song.tracks[0].measures) for song in self.songs)):
-                track.append(' ')
-            self.measures.append(track)
+    def store_change(self, sequence, pane, index, action, replace_prefix='!'):
+        prefix = {'insert': '+', 'delete': '-', 'replace': replace_prefix, 'conflict': 'x', 'equal': ' '}
+        obj = sequence[index]
+        if isinstance(obj, guitarpro.Measure):
+            measure = obj
+            track_number = measure.track.number + self.tracknumber[pane] - 1
+            self.measures[track_number][measure.number - 1] = prefix[action]
+        elif obj is guitarpro.Track:
+            if action == 'insert':
+                self.tracknumber[1 - pane] += 1
 
-        if len(self.songs) == 3:
-            replace_prefix = '><'
-        else:
-            replace_prefix = '!!'
 
-        def getmtime(fn):
-            return time.ctime(os.path.getmtime(fn))
-
-        yield 'OLDFILE:  %s\t%s' % (self.files[1], getmtime(self.files[1]))
-        yield 'MYFILE:   %s\t%s' % (self.files[0], getmtime(self.files[0]))
-        if len(self.songs) > 2:
-            yield 'YOURFILE: %s\t%s' % (self.files[2], getmtime(self.files[2]))
-
-        yield ''
-        yield 'Attributes'
-        yield '=========='
-        yield ''
-
-        for change in self.all_changes():
-            if change[0] is not None:
-                for line in self.infodiff(change, 0, replace_prefix[0]):
-                    yield line
-            if change[1] is not None:
-                for line in self.infodiff(change, 1, replace_prefix[1]):
-                    yield line
-
-        yield ''
-        yield 'Measures'
-        yield '========'
-        yield ''
-
-        for change in self.all_changes():
-            if change[0] is not None:
-                self.measurediff(change, 0, replace_prefix[0])
-            if change[1] is not None:
-                self.measurediff(change, 1, replace_prefix[1])
-
-        block = False
-
-        yield ' ' + ' '.join([str(i) for i, _ in enumerate(self.measures, start=1)])
-        for number, tracks in enumerate(zip(*self.measures)):
-            if any(x != ' ' for x in tracks):
-                yield '[{}] {}'.format('|'.join(map(str, tracks)),
-                                       number + 1)
-                block = True
-            else:
-                if block:
-                    yield ''
-                block = False
+def getmtime(fn):
+    return time.ctime(os.path.getmtime(fn))
 
 
 if __name__ == '__main__':
