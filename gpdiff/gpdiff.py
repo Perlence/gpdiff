@@ -78,6 +78,16 @@ class GPDiffer(diffutil.Differ):
         else:
             self.replace_prefixes = '!!'
 
+        self.init_diff_matrix()
+
+    def init_diff_matrix(self):
+        self.diff_matrix = []
+        for _ in range(max(len(song.tracks[0].measures) for song in self.songs)):
+            row = []
+            for _ in range(max(len(song.tracks) for song in self.songs)):
+                row.append(' ')
+            self.diff_matrix.append(row)
+
     def merge(self):
         """Merge sequences and restore tab."""
         assert len(self.songs) == 3
@@ -194,29 +204,31 @@ class GPDiffer(diffutil.Differ):
         if not all_changes:
             return
 
+        # import difflib
+        # from .myers import DiffChunk
+
+        # def isjunk(measure):
+        #     return measure.isEmpty
+
+        # sm = difflib.SequenceMatcher(isjunk=isjunk, autojunk=False)
+        # sm.set_seqs(*reversed(self._sequences))
+        # all_changes = [(DiffChunk(*chunk), None) for chunk in sm.get_opcodes() if chunk[0] != 'equal']
+
         yield ''
         yield 'Measures'
         yield '========'
         yield ''
 
-        self.measures = []
-        self.tracknumber = [0, 0]
-        for i in range(max(len(song.tracks) for song in self.songs)):
-            track = []
-            for j in range(max(len(song.tracks[0].measures) for song in self.songs)):
-                track.append(' ')
-            self.measures.append(track)
-
         for change in all_changes:
             if change[0] is not None:
-                self.measurediff(change, 0, self.replace_prefixes[0])
+                self.diff_measures(change, 0, self.replace_prefixes[0])
             if change[1] is not None:
-                self.measurediff(change, 1, self.replace_prefixes[1])
+                self.diff_measures(change, 1, self.replace_prefixes[1])
 
         block = False
 
-        yield ' ' + ' '.join([str(i) for i, _ in enumerate(self.measures, start=1)])
-        for number, tracks in enumerate(zip(*self.measures)):
+        yield ' ' + ' '.join([str(i) for i, _ in enumerate(self.diff_matrix[0], start=1)])
+        for number, tracks in enumerate(self.diff_matrix):
             if any(x != ' ' for x in tracks):
                 yield '[{}] {}'.format('|'.join(map(str, tracks)), number + 1)
                 block = True
@@ -225,47 +237,46 @@ class GPDiffer(diffutil.Differ):
                     yield ''
                 block = False
 
-    def measurediff(self, change, pane, replace_prefix='!'):
+    def diff_measures(self, change, pane, replace_prefix='!'):
         a, b = self._sequences[1], self._sequences[pane * 2]
         tag, i1, i2, j1, j2 = change[pane]
         if tag == 'replace':
             if i2 - i1 == j2 - j1:
-                for x in range(i1, i2):
-                    self.store_change(a, pane, x, 'replace', replace_prefix)
+                if i1 > j1:
+                    for x in range(i1, i2):
+                        self.store_change(a, x, 'replace', replace_prefix)
+                else:
+                    for x in range(j1, j2):
+                        self.store_change(b, x, 'replace', replace_prefix)
             elif i2 - i1 < j2 - j1:
                 for x in range(j1, j1 + i2 - i1):
-                    self.store_change(b, pane, x, 'replace', replace_prefix)
+                    self.store_change(b, x, 'replace', replace_prefix)
                 for x in range(j1 + i2 - i1, j2):
-                    self.store_change(b, pane, x, 'insert')
+                    self.store_change(b, x, 'insert')
             else:
                 for x in range(i1, i1 + j2 - j1):
-                    self.store_change(a, pane, x, 'replace', replace_prefix)
+                    self.store_change(a, x, 'replace', replace_prefix)
                 for x in range(i1 + j2 - j1, i2):
-                    self.store_change(a, pane, x, 'delete')
-        if tag == 'delete':
+                    self.store_change(a, x, 'delete')
+        elif tag == 'delete':
             for x in range(i1, i2):
-                self.store_change(a, pane, x, 'delete')
-        if tag == 'insert':
+                self.store_change(a, x, 'delete')
+        elif tag == 'insert':
             for x in range(j1, j2):
-                self.store_change(b, pane, x, 'insert')
-        if tag == 'conflict':
+                self.store_change(b, x, 'insert')
+        elif tag == 'conflict':
             if i2 - i1 == 0:
                 for x in range(j1, j2):
-                    self.store_change(b, pane, x, 'conflict')
+                    self.store_change(b, x, 'conflict')
             else:
                 for x in range(i1, i2):
-                    self.store_change(a, pane, x, 'conflict')
+                    self.store_change(a, x, 'conflict')
 
-    def store_change(self, sequence, pane, index, action, replace_prefix='!'):
+    def store_change(self, sequence, index, action, replace_prefix='!'):
         prefix = {'insert': '+', 'delete': '-', 'replace': replace_prefix, 'conflict': 'x', 'equal': ' '}
-        obj = sequence[index]
-        if isinstance(obj, guitarpro.Measure):
-            measure = obj
-            track_number = measure.track.number + self.tracknumber[pane] - 1
-            self.measures[track_number][measure.number - 1] = prefix[action]
-        elif obj is guitarpro.Track:
-            if action == 'insert':
-                self.tracknumber[1 - pane] += 1
+        measure = sequence[index]
+        track_number = measure.track.number - 1
+        self.diff_matrix[measure.number - 1][track_number] = prefix[action]
 
 
 def getmtime(fn):

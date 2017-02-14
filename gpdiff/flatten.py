@@ -23,7 +23,7 @@ class FlatSong:
 
 def flatten(song):
     """Convert Song into a tuple."""
-    song_attrs = tuple(as_dict_items(song, skip=['pageSetup', 'tracks']))
+    song_attrs = tuple(as_dict_items(song, skip=['pageSetup', 'measureHeaders', 'tracks']))
     page_setup_attrs = tuple(as_dict_items(song.pageSetup))
     measure_headers = tuple(measure.header for measure in song.tracks[0].measures)
     track_attrs = []

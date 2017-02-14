@@ -38,6 +38,7 @@ class Differ(object):
         self.num_sequences = 0
         self.seqlength = [0, 0, 0]
         self.diffs = [[], []]
+        self.matching_blocks = [[], []]
         self.conflicts = []
         self._old_merge_cache = set()
         self._changed_chunks = tuple()
@@ -48,9 +49,7 @@ class Differ(object):
 
     def _update_merge_cache(self, texts):
         if self.num_sequences == 3:
-            self._merge_cache = [c for c in self._merge_diffs(self.diffs[0],
-                                                              self.diffs[1],
-                                                              texts)]
+            self._merge_cache = [c for c in self._merge_diffs(self.diffs[0], self.diffs[1], texts)]
         else:
             self._merge_cache = [(c, None) for c in self.diffs[0]]
 
@@ -76,8 +75,7 @@ class Differ(object):
         # involve the middle pane.
         self.conflicts = []
         for i, (c1, c2) in enumerate(self._merge_cache):
-            if (c1 is not None and c1.tag == 'conflict') or \
-               (c2 is not None and c2.tag == 'conflict'):
+            if (c1 is not None and c1.tag == 'conflict') or (c2 is not None and c2.tag == 'conflict'):
                 self.conflicts.append(i)
 
         self._update_line_cache()
@@ -165,32 +163,32 @@ class Differ(object):
                 tag = "replace"
             else:
                 tag = "insert"
-        elif all(isinstance(m, guitarpro.Measure) and m.isEmpty for m in texts[0][l0:h0]):
-            if l1 != h1 and l2 == h2:
-                tag = "delete"
-            elif l1 != h1:
-                tag = "replace"
-            else:
-                tag = "insert"
-            yield None, (tag, l1, h1, l2, h2)
-            if h2 - l2 < h0 - l0:
-                yield None, ('insert', l1, h1, l0 + (h2 - l2), h0)
-            return
-        elif all(isinstance(m, guitarpro.Measure) and m.isEmpty for m in texts[2][l2:h2]):
-            if l1 != h1 and l0 == h0:
-                tag = "delete"
-            elif l1 != h1:
-                tag = "replace"
-            else:
-                tag = "insert"
-            yield (tag, l1, h1, l0, h0), None
-            if h0 - l0 < h2 - l2:
-                yield None, ('insert', l1, h1, l2 + (h0 - l0), h2)
-            return
+        # elif all(isinstance(m, guitarpro.Measure) and m.isEmpty for m in texts[0][l0:h0]):
+        #     if l1 != h1 and l2 == h2:
+        #         tag = "delete"
+        #     elif l1 != h1:
+        #         tag = "replace"
+        #     else:
+        #         tag = "insert"
+        #     yield None, (tag, l1, h1, l2, h2)
+        #     if h2 - l2 < h0 - l0:
+        #         yield None, DiffChunk('insert', l1, h1, l0 + (h2 - l2), h0)
+        #     return
+        # elif all(isinstance(m, guitarpro.Measure) and m.isEmpty for m in texts[2][l2:h2]):
+        #     if l1 != h1 and l0 == h0:
+        #         tag = "delete"
+        #     elif l1 != h1:
+        #         tag = "replace"
+        #     else:
+        #         tag = "insert"
+        #     yield (tag, l1, h1, l0, h0), None
+        #     if h0 - l0 < h2 - l2:
+        #         yield None, DiffChunk('insert', l1, h1, l2 + (h0 - l0), h2)
+        #     return
         else:
             tag = "conflict"
-        out0 = DiffChunk._make((tag, l1, h1, l0, h0))
-        out1 = DiffChunk._make((tag, l1, h1, l2, h2))
+        out0 = DiffChunk(tag, l1, h1, l0, h0)
+        out1 = DiffChunk(tag, l1, h1, l2, h2)
         yield out0, out1
 
     def _merge_diffs(self, seq0, seq1, texts):
@@ -244,6 +242,7 @@ class Differ(object):
     def set_sequences_iter(self, sequences):
         assert 0 <= len(sequences) <= 3
         self.diffs = [[], []]
+        self.matching_blocks = [[], []]
         self.num_sequences = len(sequences)
         self.seqlength = [len(s) for s in sequences]
 
@@ -251,5 +250,6 @@ class Differ(object):
             matcher = self._matcher(None, sequences[1], sequences[i * 2])
             matcher.initialise()
             self.diffs[i] = matcher.get_difference_opcodes()
+            self.matching_blocks[i] = matcher.get_matching_blocks()
         self._initialised = True
         self._update_merge_cache(sequences)

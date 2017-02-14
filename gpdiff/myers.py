@@ -15,6 +15,7 @@
 
 import collections
 import difflib
+from difflib import Match
 
 import attr
 
@@ -165,7 +166,7 @@ class MyersSequenceMatcher(difflib.SequenceMatcher):
                         i -= 1
                         continue
                 break
-            mb.append((cur_a, cur_b, cur_len))
+            mb.append(Match(cur_a, cur_b, cur_len))
         mb.reverse()
         self.matching_blocks = mb
 
@@ -200,24 +201,23 @@ class MyersSequenceMatcher(difflib.SequenceMatcher):
                         xnext = aindex[x] + common_prefix
                         ynext = bindex[y] + common_prefix
                         if (xprev - xnext != 1) or (yprev - ynext != 1):
-                            matching_blocks.insert(0, (xprev, yprev, newsnake))
+                            matching_blocks.insert(0, Match(xprev, yprev, newsnake))
                             newsnake = 0
                         xprev = xnext
                         yprev = ynext
                         newsnake += 1
-                    matching_blocks.insert(0, (xprev, yprev, newsnake))
+                    matching_blocks.insert(0, Match(xprev, yprev, newsnake))
                 else:
-                    matching_blocks.insert(0, (xprev, yprev, snake))
+                    matching_blocks.insert(0, Match(xprev, yprev, snake))
             else:
-                matching_blocks.insert(0, (x + common_prefix,
-                                           y + common_prefix, snake))
+                matching_blocks.insert(0, Match(x + common_prefix, y + common_prefix, snake))
         if common_prefix:
-            matching_blocks.insert(0, (0, 0, common_prefix))
+            matching_blocks.insert(0, Match(0, 0, common_prefix))
         if common_suffix:
-            matching_blocks.append((len(self.a) - common_suffix,
-                                    len(self.b) - common_suffix,
-                                    common_suffix))
-        matching_blocks.append((len(self.a), len(self.b), 0))
+            matching_blocks.append(Match(len(self.a) - common_suffix,
+                                         len(self.b) - common_suffix,
+                                         common_suffix))
+        matching_blocks.append(Match(len(self.a), len(self.b), 0))
         # clean-up to free memory
         self.aindex = self.bindex = None
 
