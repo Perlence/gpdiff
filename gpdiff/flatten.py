@@ -1,100 +1,117 @@
-import copy
+from collections import OrderedDict
 
 import attr
 
 import guitarpro as gp
 
 
+@attr.s
+class FlatSong:
+    song_attrs = attr.ib()
+    song_attr_count = attr.ib()
+    page_setup_attrs = attr.ib()
+    page_setup_attr_count = attr.ib()
+    measure_headers = attr.ib()
+    track_attrs = attr.ib()
+    track_attr_count = attr.ib()
+    track_channel_attrs = attr.ib()
+    track_channel_attr_count = attr.ib()
+    track_settings_attrs = attr.ib()
+    track_settings_attr_count = attr.ib()
+    measures = attr.ib()
+
+
 def flatten(song):
     """Convert Song into a tuple."""
-    result = []
-    result.extend(flat_obj(song, expand=['pageSetup'], skip=['tracks']))
+    song_attrs = tuple(as_dict_items(song, skip=['pageSetup', 'tracks']))
+    page_setup_attrs = tuple(as_dict_items(song.pageSetup))
+    measure_headers = tuple(measure.header for measure in song.tracks[0].measures)
+    track_attrs = []
+    track_channel_attrs = []
+    track_settings_attrs = []
+    measures = []
     for track in song.tracks:
-        result.extend(flat_obj(track, expand=['channel', 'settings'], skip=['measures']))
-        for measure in track.measures:
-            result.append(copy.copy(measure))
-    return tuple(result)
+        track_attrs.extend(as_dict_items(track, skip=['channel', 'settings', 'measures']))
+        track_channel_attrs.extend(as_dict_items(track.channel))
+        track_settings_attrs.extend(as_dict_items(track.settings))
+        measures.extend(track.measures)
+    return FlatSong(song_attrs, len(song_attrs),
+                    page_setup_attrs, len(page_setup_attrs),
+                    measure_headers,
+                    tuple(track_attrs), len(track_attrs) // len(song.tracks),
+                    tuple(track_channel_attrs), len(track_channel_attrs) // len(song.tracks),
+                    tuple(track_settings_attrs), len(track_settings_attrs) // len(song.tracks),
+                    tuple(measures))
 
 
-def restore(sequence):
-    """Restore Song from flat sequence."""
-    song = None
-    stack = []
-    track_number = measure_number = 1
-    until = None
-    for e in sequence:
-        if stack:
-            top = stack[-1]
-        if e is gp.Song:
-            song = gp.Song(tracks=[], measureHeaders=[])
-            stack.append(song)
-        elif e is gp.PageSetup:
-            page_setup = gp.PageSetup()
-            song.pageSetup = page_setup
-            stack.append(page_setup)
-            until = len(attr.fields(gp.PageSetup))
-        elif e is gp.Track:
-            track = gp.Track(song, number=track_number, measures=[])
-            song.tracks.append(track)
-            stack.append(track)
-            track_number += 1
-            measure_number = 1
-        elif e is gp.MidiChannel:
-            channel = e()
-            track.channel = channel
-            stack.append(channel)
-            until = len(attr.fields(gp.MidiChannel))
-        elif e is gp.TrackSettings:
-            settings = e()
-            track.settings = settings
-            stack.append(settings)
-            until = len(attr.fields(gp.TrackSettings))
-        elif isinstance(e, gp.Measure):
-            e.track = top
-            e.number = measure_number
-            e.track.measures.append(e)
-            measure_number += 1
-        else:
-            attr_name, value = e
-            if isinstance(value, tuple):
-                value = list(value)
-            setattr(top, attr_name, value)
-            if until is not None:
-                if until > 1:
-                    until -= 1
-                else:
-                    until = None
-                    stack.pop()
+def restore(flat_song):
+    """Restore Song from FlatSong instance."""
+    fs = flat_song
+    [page_setup] = from_dict_items(gp.PageSetup, fs.page_setup_attr_count, fs.page_setup_attrs)
+    [song] = from_dict_items(gp.Song, fs.song_attr_count, fs.song_attrs,
+                             pageSetup=page_setup,
+                             measureHeaders=list(fs.measure_headers),
+                             tracks=())
+
+    song.tracks = list(from_dict_items(gp.Track, fs.track_attr_count, fs.track_attrs, song=song, measures=()))
+    track_channels = from_dict_items(gp.MidiChannel, fs.track_channel_attr_count, fs.track_channel_attrs)
+    track_settings = from_dict_items(gp.TrackSettings, fs.track_settings_attr_count, fs.track_settings_attrs)
+    track_measures = restore_track_measures(fs.measure_headers, fs.measures)
+
+    for number, (track, channel, settings) in enumerate(zip(song.tracks, track_channels, track_settings), start=1):
+        track.number = number
+        track.channel = channel
+        track.settings = settings
+
+    for track, measures in zip(song.tracks, track_measures):
+        track.measures = list(measures)
+
     return song
 
 
-def flat_obj(obj, expand=[], skip=[]):
+def from_dict_items(cls, attr_count, attrs, **kwargs):
+    while attrs:
+        single_obj_attrs = attrs[:attr_count]
+        for k, v in single_obj_attrs:
+            if isinstance(v, tuple):
+                v = list(v)
+            kwargs[k] = v
+        yield cls(**kwargs)
+        attrs = attrs[attr_count:]
+
+
+def restore_track_measures(headers, all_measures):
+    while all_measures:
+        track_measures = all_measures[:len(headers)]
+        for header, measure in zip(headers, track_measures):
+            measure.header = header
+        yield track_measures
+        all_measures = all_measures[len(headers):]
+
+
+def as_dict_items(obj, skip=[]):
     """Convert *obj* into list consisting of *obj* class and *obj*
     attributes in form of tuples.
 
     >>> import guitarpro as gp
     >>> note = gp.Note()
-    >>> flat_obj(note)
-    [<class 'guitarpro.models.Note'>,
-     ('value', 0), ('velocity', 95),
+    >>> list(as_dict_items(note))
+    [('value', 0), ('velocity', 95),
      ('string', 1),
      ('isTiedNote', False),
      ('effect', NoteEffect(...)),
      ('durationPercent', 1.0),
      ('swapAccidentals', False)]
     """
-    cls = type(obj)
-    yield cls
-    for attrib in attr.fields(cls):
-        if not attrib.cmp:
-            continue
-        attr_name = attrib.name
-        if attr_name in skip:
-            continue
-        value = getattr(obj, attr_name)
-        if attr_name in expand:
-            yield from flat_obj(value)
-            continue
-        if isinstance(value, list):
-            value = tuple(value)
-        yield (attr_name, value)
+    def filter_(attrib, value):
+        if not attrib.hash:
+            return False
+        if attrib.name in skip:
+            return False
+        return True
+
+    dictionary = attr.asdict(obj, recurse=False, filter=filter_, dict_factory=OrderedDict)
+    for k, v in dictionary.items():
+        if isinstance(v, list):
+            v = tuple(v)
+        yield k, v

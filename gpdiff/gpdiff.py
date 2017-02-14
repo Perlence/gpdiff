@@ -208,9 +208,6 @@ class GPDiffer(diffutil.Differ):
         else:
             replace_prefix = '!!'
 
-        # for change in self.all_changes():
-        #     yield change
-
         def getmtime(fn):
             return time.ctime(os.path.getmtime(fn))
 

@@ -25,11 +25,11 @@ class Merger(diffutil.Differ):
 
     def _apply_change(self, text, change, mergedtext):
         LO, HI = 1, 2
-        if change[0] == 'insert':
+        if change.tag == 'insert':
             for i in range(change[LO + 2], change[HI + 2]):
                 mergedtext.append(text[i])
             return 0
-        elif change[0] == 'replace':
+        elif change.tag == 'replace':
             for i in range(change[LO + 2], change[HI + 2]):
                 mergedtext.append(text[i])
             return change[HI] - change[LO]
