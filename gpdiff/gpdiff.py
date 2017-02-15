@@ -58,20 +58,27 @@ parser.add_argument('-o', dest='output', metavar='OUTPUT', help='path to output 
 
 
 @attr.s
-class GPDiffer(diffutil.Differ):
+class GPDiffer:
     """A Differ instance with given songs.
 
     :param files: list of 2 or 3 file names: [A, O, B] or [A, O].
     :param songs: list of 2 or 3 parsed tabs.
     """
+    Differ = diffutil.Differ
+    Merger = merge.Merger
+
     files = attr.ib(default=attr.Factory(list))
     songs = attr.ib(default=attr.Factory(list))
 
+    flat_songs = attr.ib(init=False)
+    replace_prefixes = attr.ib(init=False)
+    diff_matrix = attr.ib(init=False)
+    _sequences = attr.ib(init=False)
+
     def __attrs_post_init__(self):
         super().__init__()
-        self.files = self.files[:]
-        self.songs = self.songs[:]
-        self.flat_songs = list(map(flatten.flatten, self.songs))
+        self.set_files(self.files)
+        self.set_songs(self.songs)
 
         if len(self.songs) == 3:
             self.replace_prefixes = '><'
@@ -79,6 +86,13 @@ class GPDiffer(diffutil.Differ):
             self.replace_prefixes = '!!'
 
         self.init_diff_matrix()
+
+    def set_files(self, files):
+        self.files = files[:]
+
+    def set_songs(self, songs):
+        self.songs = songs[:]
+        self.flat_songs = list(map(flatten.flatten, self.songs))
 
     def init_diff_matrix(self):
         self.diff_matrix = []
@@ -96,7 +110,7 @@ class GPDiffer(diffutil.Differ):
 
     def _merge_sequences(self):
         """Merge sequences using diff data of differ."""
-        merger = merge.Merger()
+        merger = self.Merger()
         merger.differ = self
         merger.texts = self._sequences
         return merger.merge_3_files()
@@ -115,9 +129,10 @@ class GPDiffer(diffutil.Differ):
             yield 'YOURFILE: %s\t%s' % (self.files[2], getmtime(self.files[2]))
 
     def show_attr_diff(self, section_name, attrs):
+        differ = self.Differ()
         self._sequences = attrs
-        self.set_sequences_iter(self._sequences)
-        all_changes = list(self.all_changes())
+        differ.set_sequences_iter(self._sequences)
+        all_changes = list(differ.all_changes())
         if not all_changes:
             return
 
@@ -184,7 +199,8 @@ class GPDiffer(diffutil.Differ):
             if number > 0:
                 yield ("{prefix} Track {number}: {attr_name} = {value}"
                        .format(prefix=prefix[action],
-                               number=number + self.tracknumber[pane],
+                               # number=number + self.tracknumber[pane],
+                               number=number,
                                attr_name=attr_name,
                                value=str_value))
             else:
@@ -199,8 +215,9 @@ class GPDiffer(diffutil.Differ):
 
     def show_measure_diff(self):
         self._sequences = [fs.measures for fs in self.flat_songs]
-        self.set_sequences_iter(self._sequences)
-        all_changes = list(self.all_changes())
+        differ = self.Differ()
+        differ.set_sequences_iter(self._sequences)
+        all_changes = list(differ.all_changes())
         if not all_changes:
             return
 
