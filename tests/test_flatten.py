@@ -38,7 +38,7 @@ def test_restore():
     restored_song = restore(flat_song)
     assert song == restored_song
 
-    song = guitarpro.parse(os.path.join(DIRNAME, 'Effects.gp5'))
+    song = guitarpro.parse(os.path.join(DIRNAME, 'tabs', 'Effects.gp5'))
     flat_song = flatten(song)
     restored_song = restore(flat_song)
     assert song == restored_song
