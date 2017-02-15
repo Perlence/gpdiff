@@ -66,10 +66,13 @@ class MyersSequenceMatcher(difflib.SequenceMatcher):
     isjunk = attr.ib(default=None)
     a = attr.ib(default="")
     b = attr.ib(default="")
+    autojunk = attr.ib(default=False)
 
     def __attrs_post_init__(self):
         if self.isjunk is not None:
             raise NotImplementedError('isjunk is not supported yet')
+        if self.autojunk:
+            raise NotImplementedError('autojunk is not supported yet')
         self.a = self.a[:]
         self.b = self.b[:]
         self.matching_blocks = self.opcodes = None
@@ -214,9 +217,7 @@ class MyersSequenceMatcher(difflib.SequenceMatcher):
         if common_prefix:
             matching_blocks.insert(0, Match(0, 0, common_prefix))
         if common_suffix:
-            matching_blocks.append(Match(len(self.a) - common_suffix,
-                                         len(self.b) - common_suffix,
-                                         common_suffix))
+            matching_blocks.append(Match(len(self.a) - common_suffix, len(self.b) - common_suffix, common_suffix))
         matching_blocks.append(Match(len(self.a), len(self.b), 0))
         # clean-up to free memory
         self.aindex = self.bindex = None

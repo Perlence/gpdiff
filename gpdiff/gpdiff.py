@@ -73,6 +73,7 @@ class GPDiffer:
     flat_songs = attr.ib(init=False)
     replace_prefixes = attr.ib(init=False)
     diff_matrix = attr.ib(init=False)
+    conflicts = attr.ib(init=False)
     _sequences = attr.ib(init=False)
 
     def __attrs_post_init__(self):
