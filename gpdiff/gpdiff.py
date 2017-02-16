@@ -234,6 +234,17 @@ class GPDiffer:
         self.mark_rows(align, header)
         self.mark_cells(local, parent, remote, align)
 
+        block = False
+        yield ' ' + ' '.join(map(str, range(1, total_track_number + 1)))
+        for number, tracks in enumerate(self.diff_matrix):
+            if any(x != ' ' for x in tracks):
+                yield '[{}] {}'.format('|'.join(map(str, tracks)), number + 1)
+                block = True
+            else:
+                if block:
+                    yield ''
+                block = False
+
     def prepare_measure_tables(self):
         hashes = {}
         tables = [self.hash_measures(s, fs, hashes) for s, fs in zip(self.songs, self.flat_songs)]
