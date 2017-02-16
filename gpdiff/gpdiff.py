@@ -300,11 +300,7 @@ class GPDiffer:
         return local, parent, remote, hashes
 
     def hash_measures(self, song, flat_song, hashes):
-        # TODO: Ensure that track names are unique, add hash if
-        # necessary
-        hashed_measures = []
-        # hashed_measures.append(list(range(len(measures[0]))))
-        hashed_measures.append([track.name for track in song.tracks])
+        hashed_measures = [list(self.unique_track_names(song))]
         for track_wise in flat_song.measures:
             row = []
             for measure in track_wise:
@@ -314,8 +310,14 @@ class GPDiffer:
             hashed_measures.append(row)
         return hashed_measures
 
-    def store_change(self):
-        pass
+    def unique_track_names(self, song):
+        track_names = set()
+        for track in song.tracks:
+            name = track.name
+            if name in track_names:
+                name += ':{}'.format(hash(track))
+            track_names.add(name)
+            yield name
 
 
 def getmtime(fn):
