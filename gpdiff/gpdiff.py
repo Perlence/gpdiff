@@ -228,66 +228,11 @@ class GPDiffer:
         print(list(map(astuple, align.toOrder().getList())))
         print(daff.diffAsAnsi(local, remote, flags))
 
-        has_parent = align.reference is not None
-
-        # Columns
         total_track_number = max(len(song.tracks) for song in self.songs)
         header = [' '] * total_track_number
-        for col_unit in align.meta.toOrder().getList():
-            if col_unit.p < 0 and col_unit.l < 0 and col_unit.r >= 0:
-                # Track was added
-                header[col_unit.r] = '+'
-            if col_unit.p >= 0 or not has_parent and col_unit.l >= 0 and col_unit.r < 0:
-                # Track was removed
-                header[col_unit.l] = '-'
-
-        # Rows
-        # Skip header and start from row 1
-        inserted_measures = []
-        for row_unit in align.toOrder().getList()[1:]:
-            if row_unit.p < 0 and row_unit.l < 0 and row_unit.r >= 0:
-                # Measure was inserted
-                inserted_measures.append(['+' if c == ' ' else c for c in header])
-            elif row_unit.p >= 0 or not has_parent and row_unit.l >= 0 and row_unit.r < 0:
-                if inserted_measures:
-                    # Mark previously inserted measures as replaced
-                    inserted_measures = inserted_measures[1:]
-                    self.diff_matrix.append(['!' if c == ' ' else c for c in header])
-                else:
-                    # Measure was removed
-                    self.diff_matrix.append(['-' if c == ' ' else c for c in header])
-            else:
-                self.diff_matrix.extend(inserted_measures)
-                inserted_measures = []
-                self.diff_matrix.append(header[:])
-        self.diff_matrix.extend(inserted_measures)
-
-        # Scan rows for differences
-        for row_unit in align.toOrder().getList()[1:]:
-            for col_number, col_unit in enumerate(align.meta.toOrder().getList()):
-                pp = ll = rr = None
-                if col_unit.p >= 0 and row_unit.p >= 0:
-                    pp = parent[row_unit.p][col_unit.p]
-                if col_unit.l >= 0 and row_unit.l >= 0:
-                    ll = local[row_unit.l][col_unit.l]
-                if col_unit.r >= 0 and row_unit.r >= 0:
-                    rr = remote[row_unit.r][col_unit.r]
-
-                print(astuple(row_unit), astuple(col_unit))
-                print(ll, rr)
-
-                if pp is not None:
-                    if ll == pp != rr:
-                        self.diff_matrix[row_unit.l-1][col_number] = '<'
-                    elif ll != pp == rr:
-                        self.diff_matrix[row_unit.l-1][col_number] = '>'
-                    elif ll != pp != rr:
-                        if ll == rr:
-                            self.diff_matrix[row_unit.l-1][col_number] = '!'
-                        else:
-                            self.diff_matrix[row_unit.l-1][col_number] = 'x'
-                elif ll is not None and rr is not None and ll != rr:
-                    self.diff_matrix[row_unit.l-1][col_number] = '!'
+        self.mark_columns(align, header)
+        self.mark_rows(align, header)
+        self.mark_cells(local, parent, remote, align)
 
     def prepare_measure_tables(self):
         hashes = {}
@@ -318,6 +263,66 @@ class GPDiffer:
                 name += ':{}'.format(hash(track))
             track_names.add(name)
             yield name
+
+    def mark_columns(self, align, header):
+        has_parent = align.reference is not None
+        for col_unit in align.meta.toOrder().getList():
+            if col_unit.p < 0 and col_unit.l < 0 and col_unit.r >= 0:
+                # Track was added
+                header[col_unit.r] = '+'
+            if col_unit.p >= 0 or not has_parent and col_unit.l >= 0 and col_unit.r < 0:
+                # Track was removed
+                header[col_unit.l] = '-'
+
+    def mark_rows(self, align, header):
+        has_parent = align.reference is not None
+        # Skip header and start from row 1
+        inserted_measures = []
+        for row_unit in align.toOrder().getList()[1:]:
+            if row_unit.p < 0 and row_unit.l < 0 and row_unit.r >= 0:
+                # Measure was inserted
+                inserted_measures.append(['+' if c == ' ' else c for c in header])
+            elif row_unit.p >= 0 or not has_parent and row_unit.l >= 0 and row_unit.r < 0:
+                if inserted_measures:
+                    # Mark previously inserted measures as replaced
+                    inserted_measures = inserted_measures[1:]
+                    self.diff_matrix.append(['!' if c == ' ' else c for c in header])
+                else:
+                    # Measure was removed
+                    self.diff_matrix.append(['-' if c == ' ' else c for c in header])
+            else:
+                self.diff_matrix.extend(inserted_measures)
+                inserted_measures = []
+                self.diff_matrix.append(header[:])
+        self.diff_matrix.extend(inserted_measures)
+
+    def mark_cells(self, local, parent, remote, align):
+        """Scan rows for differences."""
+        for row_unit in align.toOrder().getList()[1:]:
+            for col_number, col_unit in enumerate(align.meta.toOrder().getList()):
+                pp = ll = rr = None
+                if col_unit.p >= 0 and row_unit.p >= 0:
+                    pp = parent[row_unit.p][col_unit.p]
+                if col_unit.l >= 0 and row_unit.l >= 0:
+                    ll = local[row_unit.l][col_unit.l]
+                if col_unit.r >= 0 and row_unit.r >= 0:
+                    rr = remote[row_unit.r][col_unit.r]
+
+                print(astuple(row_unit), astuple(col_unit))
+                print(ll, rr)
+
+                if pp is not None:
+                    if ll == pp != rr:
+                        self.diff_matrix[row_unit.l-1][col_number] = '<'
+                    elif ll != pp == rr:
+                        self.diff_matrix[row_unit.l-1][col_number] = '>'
+                    elif ll != pp != rr:
+                        if ll == rr:
+                            self.diff_matrix[row_unit.l-1][col_number] = '!'
+                        else:
+                            self.diff_matrix[row_unit.l-1][col_number] = 'x'
+                elif ll is not None and rr is not None and ll != rr:
+                    self.diff_matrix[row_unit.l-1][col_number] = '!'
 
 
 def getmtime(fn):
