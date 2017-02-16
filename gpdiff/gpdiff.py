@@ -272,7 +272,7 @@ class GPDiffer:
                 header[col_unit.r] = '+'
             if col_unit.p >= 0 or not has_parent and col_unit.l >= 0 and col_unit.r < 0:
                 # Track was removed
-                header[col_unit.l] = '-'
+                header[col_unit.l] = '!' if header[col_unit.l] == '+' else '-'
 
     def mark_rows(self, align, header):
         has_parent = align.reference is not None

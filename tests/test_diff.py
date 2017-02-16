@@ -65,6 +65,12 @@ TABLE_REPLACE_MEASURES = [
       ['-'],
       [' '],
       ['!']]),
+    ('1-track.gp5',
+     '1-track-modified-9.gp5',
+     [['!'],
+      ['!'],
+      ['!'],
+      ['!']]),
 
     ('2-track.gp5',
      '3-track-modified-1.gp5',
