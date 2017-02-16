@@ -29,12 +29,15 @@ def flatten(song):
     track_attrs = []
     track_channel_attrs = []
     track_settings_attrs = []
-    measures = []
+    track_wise = []
     for track in song.tracks:
         track_attrs.extend(as_dict_items(track, skip=['channel', 'settings', 'measures']))
         track_channel_attrs.extend(as_dict_items(track.channel))
         track_settings_attrs.extend(as_dict_items(track.settings))
-        measures.extend(track.measures)
+        track_wise.append(track.measures)
+
+    measures = list(zip(*track_wise))
+
     return FlatSong(song_attrs, len(song_attrs),
                     page_setup_attrs, len(page_setup_attrs),
                     measure_headers,

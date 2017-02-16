@@ -4,6 +4,7 @@ import sys
 import time
 
 import attr
+import daff
 import guitarpro
 
 from . import flatten
@@ -215,90 +216,113 @@ class GPDiffer:
         return len(tracks)
 
     def show_measure_diff(self):
-        self._sequences = [fs.measures for fs in self.flat_songs]
-        differ = self.Differ()
-        differ.set_sequences_iter(self._sequences)
-        all_changes = list(differ.all_changes())
-        if not all_changes:
-            return
-
-        # import difflib
-        # from .myers import DiffChunk
-
-        # def isjunk(measure):
-        #     return measure.isEmpty
-
-        # sm = difflib.SequenceMatcher(isjunk=isjunk, autojunk=False)
-        # sm.set_seqs(*reversed(self._sequences))
-        # all_changes = [(DiffChunk(*chunk), None) for chunk in sm.get_opcodes() if chunk[0] != 'equal']
+        from pprint import pprint
 
         yield ''
         yield 'Measures'
         yield '========'
         yield ''
 
-        for change in all_changes:
-            if change[0] is not None:
-                self.diff_measures(change, 0, self.replace_prefixes[0])
-            if change[1] is not None:
-                self.diff_measures(change, 1, self.replace_prefixes[1])
+        local, parent, remote, hashes = self.prepare_measure_tables()
 
-        block = False
+        pprint(local)
+        pprint(remote)
+        flags = daff.CompareFlags()
+        if parent is not None:
+            flags.parent = parent
+        align = daff.compareTables(local, remote, flags).align()
 
-        yield ' ' + ' '.join([str(i) for i, _ in enumerate(self.diff_matrix[0], start=1)])
-        for number, tracks in enumerate(self.diff_matrix):
-            if any(x != ' ' for x in tracks):
-                yield '[{}] {}'.format('|'.join(map(str, tracks)), number + 1)
-                block = True
-            else:
-                if block:
-                    yield ''
-                block = False
+        print(list(map(astuple, align.meta.toOrder().getList())))
+        print(list(map(astuple, align.toOrder().getList())))
+        print(daff.diffAsAnsi(local, remote, flags))
 
-    def diff_measures(self, change, pane, replace_prefix='!'):
-        a, b = self._sequences[1], self._sequences[pane * 2]
-        tag, i1, i2, j1, j2 = change[pane]
-        if tag == 'replace':
-            if i2 - i1 == j2 - j1:
-                if i1 > j1:
-                    for x in range(i1, i2):
-                        self.store_change(a, x, 'replace', replace_prefix)
+        has_parent = align.reference is not None
+
+        # Columns
+        for col_unit in align.meta.toOrder().getList():
+            if col_unit.p < 0 and col_unit.l < 0 and col_unit.r >= 0:
+                # Track was added
+                for track_wise in self.diff_matrix:
+                    track_wise[col_unit.r] = '+'
+            if col_unit.p >= 0 or not has_parent and col_unit.l >= 0 and col_unit.r < 0:
+                # Track was removed
+                for track_wise in self.diff_matrix:
+                    track_wise[col_unit.l] = '-'
+
+        # Rows
+        # Skip header and start from row 1
+        total_track_number = len(self.diff_matrix[0])
+        for row_unit in align.toOrder().getList()[1:]:
+            if row_unit.p < 0 and row_unit.l < 0 and row_unit.r >= 0:
+                # Measure was added
+                self.diff_matrix[row_unit.r-1] = list('+' * total_track_number)
+            if row_unit.p >= 0 or not has_parent and row_unit.l >= 0 and row_unit.r < 0:
+                # Measure was removed
+                if all(cell == '+' for cell in self.diff_matrix[row_unit.l-1]):
+                    self.diff_matrix[row_unit.l-1] = list('!' * total_track_number)
                 else:
-                    for x in range(j1, j2):
-                        self.store_change(b, x, 'replace', replace_prefix)
-            elif i2 - i1 < j2 - j1:
-                for x in range(j1, j1 + i2 - i1):
-                    self.store_change(b, x, 'replace', replace_prefix)
-                for x in range(j1 + i2 - i1, j2):
-                    self.store_change(b, x, 'insert')
-            else:
-                for x in range(i1, i1 + j2 - j1):
-                    self.store_change(a, x, 'replace', replace_prefix)
-                for x in range(i1 + j2 - j1, i2):
-                    self.store_change(a, x, 'delete')
-        elif tag == 'delete':
-            for x in range(i1, i2):
-                self.store_change(a, x, 'delete')
-        elif tag == 'insert':
-            for x in range(j1, j2):
-                self.store_change(b, x, 'insert')
-        elif tag == 'conflict':
-            if i2 - i1 == 0:
-                for x in range(j1, j2):
-                    self.store_change(b, x, 'conflict')
-            else:
-                for x in range(i1, i2):
-                    self.store_change(a, x, 'conflict')
+                    self.diff_matrix[row_unit.l-1] = list('-' * total_track_number)
 
-    def store_change(self, sequence, index, action, replace_prefix='!'):
-        prefix = {'insert': '+', 'delete': '-', 'replace': replace_prefix, 'conflict': 'x', 'equal': ' '}
-        measure = sequence[index]
-        track_number = measure.track.number - 1
-        self.diff_matrix[measure.number - 1][track_number] = prefix[action]
+            for col_number, col_unit in enumerate(align.meta.toOrder().getList()):
+                pp = ll = rr = None
+                if col_unit.p >= 0 and row_unit.p >= 0:
+                    pp = parent[row_unit.p][col_unit.p]
+                if col_unit.l >= 0 and row_unit.l >= 0:
+                    ll = local[row_unit.l][col_unit.l]
+                if col_unit.r >= 0 and row_unit.r >= 0:
+                    rr = remote[row_unit.r][col_unit.r]
+
+                print(astuple(row_unit), astuple(col_unit))
+                print(ll, rr)
+
+                if pp is not None:
+                    if ll == pp != rr:
+                        self.diff_matrix[row_unit.l-1][col_number] = '<'
+                    elif ll != pp == rr:
+                        self.diff_matrix[row_unit.l-1][col_number] = '>'
+                    elif ll != pp != rr:
+                        if ll == rr:
+                            self.diff_matrix[row_unit.l-1][col_number] = '!'
+                        else:
+                            self.diff_matrix[row_unit.l-1][col_number] = 'x'
+                elif ll is not None and rr is not None and ll != rr:
+                    self.diff_matrix[row_unit.r-1][col_number] = '!'
+
+    def prepare_measure_tables(self):
+        hashes = {}
+        tables = [self.hash_measures(s, fs, hashes) for s, fs in zip(self.songs, self.flat_songs)]
+        if len(tables) == 3:
+            local, parent, remote = tables
+        else:
+            remote, local = tables
+            parent = None
+        return local, parent, remote, hashes
+
+    def hash_measures(self, song, flat_song, hashes):
+        # TODO: Ensure that track names are unique, add hash if
+        # necessary
+        hashed_measures = []
+        # hashed_measures.append(list(range(len(measures[0]))))
+        hashed_measures.append([track.name for track in song.tracks])
+        for track_wise in flat_song.measures:
+            row = []
+            for measure in track_wise:
+                hashed_measure = hash(measure)
+                hashes[hashed_measure] = measure
+                row.append(hashed_measure)
+            hashed_measures.append(row)
+        return hashed_measures
+
+    def store_change(self):
+        pass
 
 
 def getmtime(fn):
     return time.ctime(os.path.getmtime(fn))
+
+
+def astuple(hx_obj):
+    return tuple(getattr(hx_obj, field) for field in hx_obj._hx_fields)
 
 
 if __name__ == '__main__':
