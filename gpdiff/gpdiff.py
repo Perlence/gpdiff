@@ -271,7 +271,7 @@ class GPDiffer:
         for track in song.tracks:
             name = track.name
             if name in track_names:
-                name += ':{}'.format(hash(track))
+                name += ':{}'.format(track.number)
             track_names.add(name)
             yield name
 
