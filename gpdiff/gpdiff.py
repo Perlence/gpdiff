@@ -73,7 +73,7 @@ class GPDiffer:
 
     flat_songs = attr.ib(init=False)
     replace_prefixes = attr.ib(init=False)
-    diff_matrix = attr.ib(init=False)
+    diff_matrix = attr.ib(default=attr.Factory(list), init=False)
     conflicts = attr.ib(init=False)
     _sequences = attr.ib(init=False)
 
@@ -87,22 +87,12 @@ class GPDiffer:
         else:
             self.replace_prefixes = '!!'
 
-        self.init_diff_matrix()
-
     def set_files(self, files):
         self.files = files[:]
 
     def set_songs(self, songs):
         self.songs = songs[:]
         self.flat_songs = list(map(flatten.flatten, self.songs))
-
-    def init_diff_matrix(self):
-        self.diff_matrix = []
-        for _ in range(max(len(song.tracks[0].measures) for song in self.songs)):
-            row = []
-            for _ in range(max(len(song.tracks) for song in self.songs)):
-                row.append(' ')
-            self.diff_matrix.append(row)
 
     def merge(self):
         """Merge sequences and restore tab."""
@@ -218,6 +208,8 @@ class GPDiffer:
     def show_measure_diff(self):
         from pprint import pprint
 
+        self.diff_matrix = []
+
         yield ''
         yield 'Measures'
         yield '========'
@@ -239,30 +231,39 @@ class GPDiffer:
         has_parent = align.reference is not None
 
         # Columns
+        total_track_number = max(len(song.tracks) for song in self.songs)
+        header = [' '] * total_track_number
         for col_unit in align.meta.toOrder().getList():
             if col_unit.p < 0 and col_unit.l < 0 and col_unit.r >= 0:
                 # Track was added
-                for track_wise in self.diff_matrix:
-                    track_wise[col_unit.r] = '+'
+                header[col_unit.r] = '+'
             if col_unit.p >= 0 or not has_parent and col_unit.l >= 0 and col_unit.r < 0:
                 # Track was removed
-                for track_wise in self.diff_matrix:
-                    track_wise[col_unit.l] = '-'
+                header[col_unit.l] = '-'
 
         # Rows
         # Skip header and start from row 1
-        total_track_number = len(self.diff_matrix[0])
+        inserted_measures = []
         for row_unit in align.toOrder().getList()[1:]:
             if row_unit.p < 0 and row_unit.l < 0 and row_unit.r >= 0:
-                # Measure was added
-                self.diff_matrix[row_unit.r-1] = list('+' * total_track_number)
-            if row_unit.p >= 0 or not has_parent and row_unit.l >= 0 and row_unit.r < 0:
-                # Measure was removed
-                if all(cell == '+' for cell in self.diff_matrix[row_unit.l-1]):
-                    self.diff_matrix[row_unit.l-1] = list('!' * total_track_number)
+                # Measure was inserted
+                inserted_measures.append(['+' if c == ' ' else c for c in header])
+            elif row_unit.p >= 0 or not has_parent and row_unit.l >= 0 and row_unit.r < 0:
+                if inserted_measures:
+                    # Mark previously inserted measures as replaced
+                    inserted_measures = inserted_measures[1:]
+                    self.diff_matrix.append(['!' if c == ' ' else c for c in header])
                 else:
-                    self.diff_matrix[row_unit.l-1] = list('-' * total_track_number)
+                    # Measure was removed
+                    self.diff_matrix.append(['-' if c == ' ' else c for c in header])
+            else:
+                self.diff_matrix.extend(inserted_measures)
+                inserted_measures = []
+                self.diff_matrix.append(header[:])
+        self.diff_matrix.extend(inserted_measures)
 
+        # Scan rows for differences
+        for row_unit in align.toOrder().getList()[1:]:
             for col_number, col_unit in enumerate(align.meta.toOrder().getList()):
                 pp = ll = rr = None
                 if col_unit.p >= 0 and row_unit.p >= 0:
@@ -286,7 +287,7 @@ class GPDiffer:
                         else:
                             self.diff_matrix[row_unit.l-1][col_number] = 'x'
                 elif ll is not None and rr is not None and ll != rr:
-                    self.diff_matrix[row_unit.r-1][col_number] = '!'
+                    self.diff_matrix[row_unit.l-1][col_number] = '!'
 
     def prepare_measure_tables(self):
         hashes = {}
