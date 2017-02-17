@@ -80,6 +80,12 @@ TABLE_REPLACE_MEASURES = [
      '2-track.gp5',
      [list(' - '),
       list(' -!')]),
+    ('3-track-modified-3.gp5',
+     '3-track-modified-4.gp5',
+     [list(' - +'),
+      list(' - +'),
+      list(' - +'),
+      list(' - +')]),
 
     ('2-track-modified-1.gp5',
      '4-track.gp5',

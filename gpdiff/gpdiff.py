@@ -228,9 +228,8 @@ class GPDiffer:
         print(list(map(astuple, align.toOrder().getList())))
         print(daff.diffAsAnsi(local, remote, flags))
 
-        total_track_number = max(len(song.tracks) for song in self.songs)
-        header = [' '] * total_track_number
-        self.mark_columns(align, header)
+        header = self.mark_columns(align)
+        total_track_number = len(header)
         self.mark_rows(align, header)
         self.mark_cells(local, parent, remote, align)
 
@@ -275,15 +274,27 @@ class GPDiffer:
             track_names.add(name)
             yield name
 
-    def mark_columns(self, align, header):
+    def mark_columns(self, align):
         has_parent = align.reference is not None
+        header = []
+        inserted_columns = []
         for col_unit in align.meta.toOrder().getList():
             if col_unit.p < 0 and col_unit.l < 0 and col_unit.r >= 0:
-                # Track was added
-                header[col_unit.r] = '+'
-            if col_unit.p >= 0 or not has_parent and col_unit.l >= 0 and col_unit.r < 0:
-                # Track was removed
-                header[col_unit.l] = '!' if header[col_unit.l] == '+' else '-'
+                # Track was inserted
+                inserted_columns.append('+')
+            elif col_unit.p >= 0 or not has_parent and col_unit.l >= 0 and col_unit.r < 0:
+                # Track was deleted
+                if inserted_columns:
+                    inserted_columns = inserted_columns[1:]
+                    header.append('!')
+                else:
+                    header.append('-')
+            else:
+                header.extend(inserted_columns)
+                inserted_columns = []
+                header.append(' ')
+        header.extend(inserted_columns)
+        return header
 
     def mark_rows(self, align, header):
         has_parent = align.reference is not None
