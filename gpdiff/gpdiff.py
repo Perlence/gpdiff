@@ -235,9 +235,10 @@ class GPDiffer:
 
         block = False
         yield ' ' + ' '.join(map(str, range(1, total_track_number + 1)))
-        for number, tracks in enumerate(self.diff_matrix):
+        for number, tracks in enumerate(self.diff_matrix, start=1):
             if any(x != ' ' for x in tracks):
-                yield '[{}] {}'.format('|'.join(map(str, tracks)), number + 1)
+                # TODO: Print measure numbers of local and remote files
+                yield '[{}] {}'.format('|'.join(map(str, tracks)), number)
                 block = True
             else:
                 if block:
@@ -321,7 +322,7 @@ class GPDiffer:
     def mark_cells(self, local, parent, remote, align):
         """Scan rows for differences."""
         for row_unit in align.toOrder().getList()[1:]:
-            for col_number, col_unit in enumerate(align.meta.toOrder().getList()):
+            for col_unit in align.meta.toOrder().getList():
                 pp = ll = rr = None
                 if col_unit.p >= 0 and row_unit.p >= 0:
                     pp = parent[row_unit.p][col_unit.p]
@@ -333,18 +334,20 @@ class GPDiffer:
                 print(astuple(row_unit), astuple(col_unit))
                 print(ll, rr)
 
+                col_number = max(col_unit.l, col_unit.r)
+                row_number = max(row_unit.l, row_unit.r)-1
                 if pp is not None:
                     if ll == pp != rr:
-                        self.diff_matrix[row_unit.l-1][col_number] = '<'
+                        self.diff_matrix[row_number][col_number] = '<'
                     elif ll != pp == rr:
-                        self.diff_matrix[row_unit.l-1][col_number] = '>'
+                        self.diff_matrix[row_number][col_number] = '>'
                     elif ll != pp != rr:
                         if ll == rr:
-                            self.diff_matrix[row_unit.l-1][col_number] = '!'
+                            self.diff_matrix[row_number][col_number] = '!'
                         else:
-                            self.diff_matrix[row_unit.l-1][col_number] = 'x'
+                            self.diff_matrix[row_number][col_number] = 'x'
                 elif ll is not None and rr is not None and ll != rr:
-                    self.diff_matrix[row_unit.l-1][col_number] = '!'
+                    self.diff_matrix[row_number][col_number] = '!'
 
 
 def getmtime(fn):

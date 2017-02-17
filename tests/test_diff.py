@@ -115,11 +115,41 @@ TABLE_REPLACE_MEASURES = [
       list('   +'),
       list('++++'),
       list('++++')]),
+    ('4-track-modified-2.gp5',
+     '4-track-modified-3.gp5',
+     [list('!!!!'),
+      list('!+++'),
+      list('!+++'),
+      list('!+++'),
+      list('!+++'),
+      list('!+++'),
+      list('!+++'),
+      list('!+++'),
+      list('!+++'),
+      list('!   '),
+      list('!   '),
+      list('!   '),
+      list('!!  '),
+      list('!!  '),
+      list('!!  '),
+      list('!!  '),
+      list('!!  '),
+      list('!!  '),
+      list('!!  '),
+      list('!!  '),
+      list('!!  '),
+      list('!!!!'),
+      list('!!!!'),
+      list('!!!!'),
+      list('!!! '),
+      list('!!!!'),
+      list('!!!!'),
+      list('!!!!')]),
 ]
 
 
 @pytest.mark.parametrize('file_a, file_b, expected_diff_matrix', TABLE_REPLACE_MEASURES)
-def test_replace_measures(file_a, file_b, expected_diff_matrix):
+def test_diff_matrix(file_a, file_b, expected_diff_matrix):
     song_a = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_a))
     song_b = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_b))
     differ = gpdiff.GPDiffer([file_b, file_a], [song_b, song_a])
