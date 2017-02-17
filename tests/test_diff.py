@@ -126,11 +126,11 @@ TABLE_REPLACE_MEASURES = [
 ]
 
 
-@pytest.mark.parametrize('file_a, file_b, expected_diff_matrix', TABLE_REPLACE_MEASURES)
-def test_diff_matrix(file_a, file_b, expected_diff_matrix):
-    song_a = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_a))
-    song_b = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_b))
-    differ = gpdiff.GPDiffer([file_b, file_a], [song_b, song_a])
+@pytest.mark.parametrize('file_l, file_r, expected_diff_matrix', TABLE_REPLACE_MEASURES)
+def test_diff_matrix(file_l, file_r, expected_diff_matrix):
+    song_l = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_l))
+    song_r = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_r))
+    differ = gpdiff.GPDiffer([file_r, file_l], [song_r, song_l])
     for line in differ.show_measure_diff():
         print(line)
     assert differ.diff_matrix == expected_diff_matrix
@@ -186,11 +186,46 @@ TABLE_MARK_ROWS = [
 ]
 
 
-@pytest.mark.parametrize('file_a, file_b, expected_measure_numbers', TABLE_MARK_ROWS)
-def test_mark_rows(file_a, file_b, expected_measure_numbers):
-    song_a = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_a))
-    song_b = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_b))
-    differ = gpdiff.GPDiffer([file_b, file_a], [song_b, song_a])
+@pytest.mark.parametrize('file_l, file_r, expected_measure_numbers', TABLE_MARK_ROWS)
+def test_mark_rows(file_l, file_r, expected_measure_numbers):
+    song_l = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_l))
+    song_r = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_r))
+    differ = gpdiff.GPDiffer([file_r, file_l], [song_r, song_l])
     for line in differ.show_measure_diff():
         print(line)
     assert differ.measure_numbers == expected_measure_numbers
+
+
+TABLE_MERGE = [
+    ('1-track.gp5', '1-track-modified-1.gp5', '1-track-modified-2.gp5',
+     [list(' '),
+      list('+'),
+      list('+'),
+      list(' ')]),
+    ('1-track.gp5', '1-track-modified-4.gp5', '1-track-modified-2.gp5',
+     [list(' '),
+      list('<'),
+      list('+'),
+      list(' ')]),
+    ('1-track-modified-6.gp5', '2-track-modified-2.gp5', '2-track-modified-3.gp5',
+     [list(' + '),
+      list(' + '),
+      list(' + '),
+      list('<+!')]),
+    ('1-track-modified-6.gp5', '2-track-modified-4.gp5', '2-track-modified-5.gp5',
+     [list(' + '),
+      list('!+ '),
+      list(' + '),
+      list('<+!')]),
+]
+
+
+@pytest.mark.parametrize('file_p, file_l, file_r, expected_diff_matrix', TABLE_MERGE)
+def test_merge(file_p, file_l, file_r, expected_diff_matrix):
+    song_p = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_p))
+    song_l = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_l))
+    song_r = guitarpro.parse(os.path.join(DIRNAME, 'tabs', file_r))
+    differ = gpdiff.GPDiffer([file_l, file_p, file_r], [song_l, song_p, song_r])
+    for line in differ.show_measure_diff():
+        print(line)
+    assert differ.diff_matrix == expected_diff_matrix

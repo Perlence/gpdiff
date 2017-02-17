@@ -219,11 +219,14 @@ class GPDiffer:
 
         local, parent, remote, hashes = self.prepare_measure_tables()
 
+        pprint(parent)
         pprint(local)
         pprint(remote)
         flags = daff.CompareFlags()
         if parent is not None:
-            flags.parent = parent
+            flags.parent = daff.PythonTableView(parent)
+            flags.show_unchanged = True
+            flags.show_unchanged_columns = True
         align = daff.compareTables(local, remote, flags).align()
 
         print(list(map(astuple, align.meta.toOrder().getList())))
@@ -231,11 +234,14 @@ class GPDiffer:
         print(daff.diffAsAnsi(local, remote, flags))
 
         header = self.mark_columns(align)
-        total_track_number = len(header)
+        print('header', header)
         self.mark_rows(align, header)
+        pprint(('after mark_rows', self.diff_matrix))
         self.mark_cells(local, parent, remote, align)
+        pprint(('after mark_cells', self.diff_matrix))
 
         block = False
+        total_track_number = len(header)
         yield ' ' + ' '.join(map(str, range(1, total_track_number + 1)))
         for (local_number, remote_number), tracks in zip(self.measure_numbers, self.diff_matrix):
             if any(x != ' ' for x in tracks):
@@ -248,6 +254,16 @@ class GPDiffer:
                 if block:
                     yield ''
                 block = False
+
+        if parent is not None:
+            parent_table = daff.PythonTableView(parent)
+            local_table = daff.PythonTableView(local)
+            remote_table = daff.PythonTableView(remote)
+            flags = daff.CompareFlags()
+            merger = daff.Merger(parent_table, local_table, remote_table, flags)
+            merger.apply()
+            print('Merged:')
+            pprint(local_table.getData())
 
     def prepare_measure_tables(self):
         hashes = {}
@@ -287,7 +303,7 @@ class GPDiffer:
             if col_unit.p < 0 and col_unit.l < 0 and col_unit.r >= 0:
                 # Track was inserted
                 inserted_columns.append('+')
-            elif col_unit.p >= 0 or not has_parent and col_unit.l >= 0 and col_unit.r < 0:
+            elif (col_unit.p >= 0 or not has_parent) and col_unit.l >= 0 and col_unit.r < 0:
                 # Track was deleted
                 if inserted_columns:
                     inserted_columns = inserted_columns[1:]
@@ -311,7 +327,8 @@ class GPDiffer:
                 # Measure was inserted
                 inserted_measures.append(['+' if c == ' ' else c for c in header])
                 inserted_measure_numbers.append((None, row_unit.r))
-            elif row_unit.p >= 0 or not has_parent and row_unit.l >= 0 and row_unit.r < 0:
+            elif (row_unit.p >= 0 or not has_parent) and row_unit.l >= 0 and row_unit.r < 0:
+                print('beep', astuple(row_unit))
                 if inserted_measures:
                     # Mark previously inserted measures as replaced
                     inserted_measures = inserted_measures[1:]
@@ -322,7 +339,7 @@ class GPDiffer:
                     # Measure was removed
                     self.diff_matrix.append(['-' if c == ' ' else c for c in header])
                     self.measure_numbers.append((row_unit.l, None))
-            else:
+            elif row_unit.l >= 0 or row_unit.r >= 0:
                 self.diff_matrix.extend(inserted_measures)
                 self.measure_numbers.extend(inserted_measure_numbers)
                 inserted_measures = []
@@ -349,7 +366,7 @@ class GPDiffer:
 
                 col_number = max(col_unit.l, col_unit.r)
                 row_number = max(row_unit.l, row_unit.r)-1
-                if pp is not None:
+                if pp is not None and (ll is not None or rr is not None):
                     if ll == pp != rr:
                         self.diff_matrix[row_number][col_number] = '<'
                     elif ll != pp == rr:
