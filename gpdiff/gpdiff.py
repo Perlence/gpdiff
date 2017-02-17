@@ -74,6 +74,7 @@ class GPDiffer:
     flat_songs = attr.ib(init=False)
     replace_prefixes = attr.ib(init=False)
     diff_matrix = attr.ib(default=attr.Factory(list), init=False)
+    measure_numbers = attr.ib(default=attr.Factory(list), init=False)
     conflicts = attr.ib(init=False)
     _sequences = attr.ib(init=False)
 
@@ -209,6 +210,7 @@ class GPDiffer:
         from pprint import pprint
 
         self.diff_matrix = []
+        self.measure_numbers = []
 
         yield ''
         yield 'Measures'
@@ -235,10 +237,12 @@ class GPDiffer:
 
         block = False
         yield ' ' + ' '.join(map(str, range(1, total_track_number + 1)))
-        for number, tracks in enumerate(self.diff_matrix, start=1):
+        for (local_number, remote_number), tracks in zip(self.measure_numbers, self.diff_matrix):
             if any(x != ' ' for x in tracks):
-                # TODO: Print measure numbers of local and remote files
-                yield '[{}] {}'.format('|'.join(map(str, tracks)), number)
+                yield ('[{}] {}:{}'
+                       .format('|'.join(map(str, tracks)),
+                               str(local_number).rjust(3) if local_number is not None else '   ',
+                               str(remote_number).ljust(3) if remote_number is not None else '   '))
                 block = True
             else:
                 if block:
@@ -301,23 +305,32 @@ class GPDiffer:
         has_parent = align.reference is not None
         # Skip header and start from row 1
         inserted_measures = []
+        inserted_measure_numbers = []
         for row_unit in align.toOrder().getList()[1:]:
             if row_unit.p < 0 and row_unit.l < 0 and row_unit.r >= 0:
                 # Measure was inserted
                 inserted_measures.append(['+' if c == ' ' else c for c in header])
+                inserted_measure_numbers.append((None, row_unit.r))
             elif row_unit.p >= 0 or not has_parent and row_unit.l >= 0 and row_unit.r < 0:
                 if inserted_measures:
                     # Mark previously inserted measures as replaced
                     inserted_measures = inserted_measures[1:]
+                    unit, *inserted_measure_numbers = inserted_measure_numbers
                     self.diff_matrix.append(['!' if c == ' ' else c for c in header])
+                    self.measure_numbers.append((row_unit.l, unit[1]))
                 else:
                     # Measure was removed
                     self.diff_matrix.append(['-' if c == ' ' else c for c in header])
+                    self.measure_numbers.append((row_unit.l, None))
             else:
                 self.diff_matrix.extend(inserted_measures)
+                self.measure_numbers.extend(inserted_measure_numbers)
                 inserted_measures = []
+                inserted_measure_numbers = []
                 self.diff_matrix.append(header[:])
+                self.measure_numbers.append((row_unit.l, row_unit.r))
         self.diff_matrix.extend(inserted_measures)
+        self.measure_numbers.extend(inserted_measure_numbers)
 
     def mark_cells(self, local, parent, remote, align):
         """Scan rows for differences."""
