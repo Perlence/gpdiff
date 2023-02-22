@@ -28,7 +28,7 @@ opcode_reverse = {
 }
 
 
-class Differ(object):
+class Differ:
     """Utility class to hold diff2 or diff3 chunks"""
 
     _matcher = MyersSequenceMatcher
@@ -238,8 +238,7 @@ class Differ(object):
                 assert len(using[0]) == 1
                 yield using[0][0], None
             else:
-                for c in self._auto_merge(using, texts):
-                    yield c
+                yield from self._auto_merge(using, texts)
 
     def set_sequences_iter(self, sequences):
         assert 0 <= len(sequences) <= 3

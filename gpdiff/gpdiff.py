@@ -137,29 +137,23 @@ class GPDiffer(diffutil.Differ):
         tag, i1, i2, j1, j2 = change[pane]
         if tag == 'replace':
             for x in range(i1, i2):
-                for line in self.print_info(a, pane, x, 'delete'):
-                    yield line
+                yield from self.print_info(a, pane, x, 'delete')
             for x in range(j1, j2):
-                for line in self.print_info(b, pane, x, 'insert'):
-                    yield line
+                yield from self.print_info(b, pane, x, 'insert')
         if tag == 'delete':
             for x in range(i1, i2):
-                for line in self.print_info(a, pane, x, 'delete'):
-                    yield line
+                yield from self.print_info(a, pane, x, 'delete')
         if tag == 'insert':
             for x in range(j1, j2):
-                for line in self.print_info(b, pane, x, 'insert'):
-                    yield line
+                yield from self.print_info(b, pane, x, 'insert')
         if tag == 'conflict':
             yield replace_prefix * 8
             if i2 - i1 == 0:
                 for x in range(j1, j2):
-                    for line in self.print_info(b, pane, x, 'conflict'):
-                        yield line
+                    yield from self.print_info(b, pane, x, 'conflict')
             else:
                 for x in range(i1, i2):
-                    for line in self.print_info(a, pane, x, 'conflict'):
-                        yield line
+                    yield from self.print_info(a, pane, x, 'conflict')
 
     def measurediff(self, change, pane, replace_prefix='!'):
         a, b = self._sequences[1], self._sequences[pane * 2]
@@ -214,10 +208,10 @@ class GPDiffer(diffutil.Differ):
         def getmtime(fn):
             return time.ctime(os.path.getmtime(fn))
 
-        yield 'OLDFILE:  %s\t%s' % (self.files[1], getmtime(self.files[1]))
-        yield 'MYFILE:   %s\t%s' % (self.files[0], getmtime(self.files[0]))
+        yield f'OLDFILE:  {self.files[1]}\t{getmtime(self.files[1])}'
+        yield f'MYFILE:   {self.files[0]}\t{getmtime(self.files[0])}'
         if len(self.songs) > 2:
-            yield 'YOURFILE: %s\t%s' % (self.files[2], getmtime(self.files[2]))
+            yield f'YOURFILE: {self.files[2]}\t{getmtime(self.files[2])}'
 
         yield ''
         yield 'Attributes'
@@ -226,11 +220,9 @@ class GPDiffer(diffutil.Differ):
 
         for change in self.all_changes():
             if change[0] is not None:
-                for line in self.infodiff(change, 0, replace_prefix[0]):
-                    yield line
+                yield from self.infodiff(change, 0, replace_prefix[0])
             if change[1] is not None:
-                for line in self.infodiff(change, 1, replace_prefix[1]):
-                    yield line
+                yield from self.infodiff(change, 1, replace_prefix[1])
 
         yield ''
         yield 'Measures'
