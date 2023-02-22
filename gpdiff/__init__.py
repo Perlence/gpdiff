@@ -1,1 +1,1 @@
-import gpdiff
+import gpdiff  # noqa: F401
