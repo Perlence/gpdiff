@@ -86,7 +86,7 @@ def flat_obj(obj, expand=[], skip=[]):
     cls = type(obj)
     yield cls
     for attrib in attr.fields(cls):
-        if not attrib.cmp:
+        if not attrib.eq:
             continue
         attr_name = attrib.name
         if attr_name in skip:
