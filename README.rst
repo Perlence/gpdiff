@@ -19,7 +19,7 @@ Please, check the enclosed CLI help message:
 
 .. code-block:: sh
 
-   gpdiff -h
+   gpdiff --help
 
 
 Acknowledgements

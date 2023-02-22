@@ -1,0 +1,47 @@
+[project]
+name = "gpdiff"
+dynamic = ["version"]
+description = "Compute 2-way and 3-way diffs of Guitar Pro tablatures"
+readme = "README.rst"
+license = {text = "LGPL-2.0-or-later"}
+authors = [{name = "Sviatoslav Abakumov", email = "dust.harvesting@gmail.com"}]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v2 or later (GPLv2+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Artistic Software",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "attrs~=22.2",
+    "PyGuitarPro~=0.9.3",
+]
+
+[project.scripts]
+gpdiff = "gpdiff.gpdiff:main"
+
+[project.urls]
+Code = "https://github.com/Perlence/gpdiff"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["gpdiff"]
+
+[tool.setuptools.dynamic]
+version = {attr = "gpdiff.__version__"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
